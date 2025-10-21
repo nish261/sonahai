@@ -1,0 +1,1535 @@
+#!/usr/bin/env python3
+"""
+Simple Subdomain Scanner UI - Works reliably
+"""
+
+import streamlit as st
+import subprocess
+import os
+import time
+from pathlib import Path
+import pandas as pd
+from datetime import datetime
+import poc_generators as poc
+import credentials_manager as creds_mgr
+
+st.set_page_config(
+    page_title="Subdomain Takeover Scanner",
+    page_icon="🔍",
+    layout="wide"
+)
+
+# Organized output folders
+DESKTOP_PATH = Path.home() / "Desktop"
+RESULTS_FOLDER = DESKTOP_PATH / "Subdomain_Takeover_Results"
+SCANS_FOLDER = RESULTS_FOLDER / "Scans"
+VERIFIED_FOLDER = RESULTS_FOLDER / "Verified_Vulnerabilities"
+NICHE_FOLDER = RESULTS_FOLDER / "Niche_Analysis"
+POCS_FOLDER = RESULTS_FOLDER / "PoC_Files"
+
+# Create folders if they don't exist
+for folder in [RESULTS_FOLDER, SCANS_FOLDER, VERIFIED_FOLDER, NICHE_FOLDER, POCS_FOLDER]:
+    folder.mkdir(parents=True, exist_ok=True)
+
+# Output files
+OUTPUT_FILE = SCANS_FOLDER / "subdomain_takeover_results.txt"
+DETAILED_FILE = SCANS_FOLDER / "subdomain_takeover_detailed.csv"
+VERIFIED_FILE = VERIFIED_FOLDER / "verified_vulnerabilities.txt"
+VERIFIED_CSV = VERIFIED_FOLDER / "verified_vulnerabilities.csv"
+NICHE_CSV = NICHE_FOLDER / "niche_analysis.csv"
+PROGRESS_FILE = Path("scan_progress.txt")
+STATUS_FILE = Path("scan_status.txt")
+VERIFY_PROGRESS = Path("verify_progress.txt")
+VERIFY_STATUS = Path("verify_status.txt")
+NICHE_PROGRESS = Path("niche_progress.txt")
+NICHE_STATUS = Path("niche_status.txt")
+PIPELINE_PROGRESS = Path("pipeline_progress.txt")
+PIPELINE_STATUS = Path("pipeline_status.txt")
+
+# Header
+st.title("🔍 Subdomain Takeover Scanner")
+st.markdown("**Bug Bounty Tool** - Find dangling DNS and unclaimed resources")
+
+# Check scanner engine status
+import subprocess as sp
+subdominator_available = False
+subdominator_paths = [
+    Path.home() / 'subdominator',
+    Path.home() / 'subdominator-bin' / 'Subdominator',
+]
+for path in subdominator_paths:
+    if path.exists() and path.is_file():
+        subdominator_available = True
+        break
+
+if subdominator_available:
+    st.success("🚀 **Scanner Engine:** Subdominator (Fast + Accurate | 97 fingerprints)")
+else:
+    st.info("⚙️ **Scanner Engine:** Python + dig (Standard | 68 fingerprints) - Install Subdominator for 8x speed boost!")
+
+# Sidebar
+st.sidebar.header("⚙️ Configuration")
+
+# Load saved credentials
+if 'creds' not in st.session_state:
+    st.session_state.creds = creds_mgr.load_credentials()
+    if not st.session_state.creds:
+        st.session_state.creds = creds_mgr.get_default_creds()
+
+# User Profile Section
+st.sidebar.subheader("👤 Platform Credentials")
+with st.sidebar.expander("Credential Manager", expanded=False):
+    st.markdown("### 👤 Basic Info")
+    st.session_state.creds['profile']['researcher_name'] = st.text_input(
+        "Your Name",
+        value=st.session_state.creds['profile'].get('researcher_name', ''),
+        placeholder="researcher123"
+    )
+    st.session_state.creds['profile']['researcher_email'] = st.text_input(
+        "Your Email",
+        value=st.session_state.creds['profile'].get('researcher_email', ''),
+        placeholder="you@example.com"
+    )
+
+    st.markdown("---")
+    st.markdown("### 🪣 AWS")
+    st.session_state.creds['aws']['access_key_id'] = st.text_input(
+        "Access Key ID",
+        value=st.session_state.creds['aws'].get('access_key_id', ''),
+        type="password"
+    )
+    st.session_state.creds['aws']['secret_access_key'] = st.text_input(
+        "Secret Access Key",
+        value=st.session_state.creds['aws'].get('secret_access_key', ''),
+        type="password"
+    )
+    st.session_state.creds['aws']['default_region'] = st.selectbox(
+        "Default Region",
+        ["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1"],
+        index=["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1"].index(
+            st.session_state.creds['aws'].get('default_region', 'us-east-1')
+        ) if st.session_state.creds['aws'].get('default_region') in ["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1"] else 0
+    )
+
+    st.markdown("---")
+    st.markdown("### ☁️ Azure")
+    st.session_state.creds['azure']['username'] = st.text_input(
+        "Username/Email",
+        value=st.session_state.creds['azure'].get('username', ''),
+        key="azure_user"
+    )
+    st.session_state.creds['azure']['password'] = st.text_input(
+        "Password",
+        value=st.session_state.creds['azure'].get('password', ''),
+        type="password",
+        key="azure_pass"
+    )
+    st.session_state.creds['azure']['subscription_id'] = st.text_input(
+        "Subscription ID",
+        value=st.session_state.creds['azure'].get('subscription_id', ''),
+        key="azure_sub"
+    )
+    st.session_state.creds['azure']['default_location'] = st.selectbox(
+        "Default Location",
+        ["eastus", "westus", "westus2", "northeurope", "westeurope"],
+        index=["eastus", "westus", "westus2", "northeurope", "westeurope"].index(
+            st.session_state.creds['azure'].get('default_location', 'eastus')
+        ) if st.session_state.creds['azure'].get('default_location') in ["eastus", "westus", "westus2", "northeurope", "westeurope"] else 0,
+        key="azure_loc"
+    )
+
+    st.markdown("---")
+    st.markdown("### 📄 GitHub")
+    st.session_state.creds['github']['username'] = st.text_input(
+        "Username",
+        value=st.session_state.creds['github'].get('username', ''),
+        key="gh_user"
+    )
+    st.session_state.creds['github']['password'] = st.text_input(
+        "Password",
+        value=st.session_state.creds['github'].get('password', ''),
+        type="password",
+        key="gh_pass"
+    )
+    st.session_state.creds['github']['personal_access_token'] = st.text_input(
+        "Personal Access Token",
+        value=st.session_state.creds['github'].get('personal_access_token', ''),
+        type="password",
+        key="gh_token"
+    )
+
+    st.markdown("---")
+    st.markdown("### 🚀 Heroku")
+    st.session_state.creds['heroku']['email'] = st.text_input(
+        "Email",
+        value=st.session_state.creds['heroku'].get('email', ''),
+        key="heroku_email"
+    )
+    st.session_state.creds['heroku']['password'] = st.text_input(
+        "Password",
+        value=st.session_state.creds['heroku'].get('password', ''),
+        type="password",
+        key="heroku_pass"
+    )
+    st.session_state.creds['heroku']['api_key'] = st.text_input(
+        "API Key",
+        value=st.session_state.creds['heroku'].get('api_key', ''),
+        type="password",
+        key="heroku_key"
+    )
+
+    st.markdown("---")
+    st.markdown("### 💧 DigitalOcean")
+    st.session_state.creds['digitalocean']['email'] = st.text_input(
+        "Email",
+        value=st.session_state.creds['digitalocean'].get('email', ''),
+        key="do_email"
+    )
+    st.session_state.creds['digitalocean']['password'] = st.text_input(
+        "Password",
+        value=st.session_state.creds['digitalocean'].get('password', ''),
+        type="password",
+        key="do_pass"
+    )
+    st.session_state.creds['digitalocean']['api_token'] = st.text_input(
+        "API Token",
+        value=st.session_state.creds['digitalocean'].get('api_token', ''),
+        type="password",
+        key="do_token"
+    )
+
+    st.markdown("---")
+    st.markdown("### 🛍️ Shopify")
+    st.session_state.creds['shopify']['email'] = st.text_input(
+        "Email",
+        value=st.session_state.creds['shopify'].get('email', ''),
+        key="shopify_email"
+    )
+    st.session_state.creds['shopify']['password'] = st.text_input(
+        "Password",
+        value=st.session_state.creds['shopify'].get('password', ''),
+        type="password",
+        key="shopify_pass"
+    )
+    st.session_state.creds['shopify']['partner_api_key'] = st.text_input(
+        "Partner API Key",
+        value=st.session_state.creds['shopify'].get('partner_api_key', ''),
+        type="password",
+        key="shopify_api_key"
+    )
+
+    st.markdown("---")
+    st.markdown("### 📝 WordPress")
+    st.session_state.creds['wordpress']['username'] = st.text_input(
+        "Username",
+        value=st.session_state.creds['wordpress'].get('username', ''),
+        key="wp_user"
+    )
+    st.session_state.creds['wordpress']['password'] = st.text_input(
+        "Password",
+        value=st.session_state.creds['wordpress'].get('password', ''),
+        type="password",
+        key="wp_pass"
+    )
+    st.session_state.creds['wordpress']['email'] = st.text_input(
+        "Email",
+        value=st.session_state.creds['wordpress'].get('email', ''),
+        key="wp_email"
+    )
+
+    st.markdown("---")
+    st.markdown("### 🔶 Cloudflare")
+    st.session_state.creds['cloudflare']['email'] = st.text_input(
+        "Email",
+        value=st.session_state.creds['cloudflare'].get('email', ''),
+        key="cf_email"
+    )
+    st.session_state.creds['cloudflare']['api_key'] = st.text_input(
+        "Global API Key",
+        value=st.session_state.creds['cloudflare'].get('api_key', ''),
+        type="password",
+        key="cf_api_key"
+    )
+    st.session_state.creds['cloudflare']['api_token'] = st.text_input(
+        "API Token",
+        value=st.session_state.creds['cloudflare'].get('api_token', ''),
+        type="password",
+        key="cf_token"
+    )
+
+    st.markdown("---")
+    st.markdown("### 📊 Moz API (for DR/Backlink Data)")
+    st.info("Get free tier at: https://moz.com/products/api (50 lookups/month)")
+    st.session_state.creds.setdefault('moz', {})
+    st.session_state.creds['moz']['access_id'] = st.text_input(
+        "Access ID",
+        value=st.session_state.creds['moz'].get('access_id', ''),
+        key="moz_id"
+    )
+    st.session_state.creds['moz']['secret_key'] = st.text_input(
+        "Secret Key",
+        value=st.session_state.creds['moz'].get('secret_key', ''),
+        type="password",
+        key="moz_key"
+    )
+
+    st.markdown("---")
+    col_save, col_delete = st.columns(2)
+    with col_save:
+        if st.button("💾 Save Credentials", use_container_width=True):
+            creds_mgr.save_credentials(st.session_state.creds)
+            st.success("Saved!")
+            st.rerun()
+
+    with col_delete:
+        if st.button("🗑️ Clear All", use_container_width=True):
+            creds_mgr.delete_credentials()
+            st.session_state.creds = creds_mgr.get_default_creds()
+            st.success("Cleared!")
+            st.rerun()
+
+    # Status
+    if st.session_state.creds['profile'].get('researcher_name'):
+        st.success(f"✓ {st.session_state.creds['profile']['researcher_name']}")
+
+        configured = []
+        if st.session_state.creds['aws'].get('access_key_id'): configured.append("AWS")
+        if st.session_state.creds['azure'].get('username'): configured.append("Azure")
+        if st.session_state.creds['github'].get('username'): configured.append("GitHub")
+        if st.session_state.creds['heroku'].get('email'): configured.append("Heroku")
+        if st.session_state.creds['digitalocean'].get('email'): configured.append("DO")
+        if st.session_state.creds['shopify'].get('email'): configured.append("Shopify")
+        if st.session_state.creds['wordpress'].get('username'): configured.append("WP")
+        if st.session_state.creds['cloudflare'].get('email'): configured.append("CF")
+        if st.session_state.creds.get('moz', {}).get('access_id'): configured.append("Moz")
+
+        if configured:
+            st.info(f"✓ {', '.join(configured)}")
+
+st.sidebar.markdown("---")
+
+# Scanner Engine Info
+if not subdominator_available:
+    st.sidebar.subheader("⚡ Upgrade to Subdominator")
+    with st.sidebar.expander("Install Subdominator (8x faster)", expanded=False):
+        st.markdown("""
+        **Subdominator** is 8x faster and has 97 service fingerprints!
+
+        **To install:**
+        ```bash
+        # Run the install script
+        chmod +x install_scanner_deps.sh
+        ./install_scanner_deps.sh
+        ```
+
+        Or manually:
+        ```bash
+        # Install .NET SDK
+        curl -sSL https://dot.net/v1/dotnet-install.sh | \\
+          bash -s -- --channel 9.0
+
+        # Build Subdominator
+        cd ~/Subdominator/Subdominator
+        ~/.dotnet/dotnet publish -c Release \\
+          -r osx-arm64 --self-contained \\
+          -o ~/subdominator-bin
+        ```
+
+        After installing, restart the app to use Subdominator!
+        """)
+    st.sidebar.markdown("---")
+
+# Scan Configuration
+st.sidebar.subheader("🎯 Scan Configuration")
+with st.sidebar.expander("Scan Settings", expanded=True):
+    start_rank = st.number_input(
+        "Start Rank",
+        min_value=1,
+        max_value=1000000,
+        value=5000,
+        step=100,
+        help="Starting position in Tranco rankings (1 = google.com, etc.)"
+    )
+
+    num_domains = st.number_input(
+        "Number of Domains",
+        min_value=10,
+        max_value=5000,
+        value=100,
+        step=10
+    )
+
+    st.markdown("---")
+    st.markdown("**🔍 Domain Extension Filter** (Optional)")
+
+    use_extension_filter = st.checkbox(
+        "Filter by extension",
+        value=False,
+        help="Only scan subdomains with specific extensions"
+    )
+
+    target_extensions = ""
+    if use_extension_filter:
+        target_extensions = st.text_input(
+            "Extensions (comma-separated)",
+            value=".com, .net, .org",
+            placeholder=".com, .co.uk, .io",
+            help="Only scan subdomains ending with these extensions. Example: .com, .io, .ai"
+        )
+
+        st.info(f"""
+        **Target:** Ranks {start_rank:,} - {start_rank + num_domains:,}
+        **Extensions:** {target_extensions if target_extensions else 'All'}
+        """)
+    else:
+        st.info(f"""
+        **Target:** Ranks {start_rank:,} - {start_rank + num_domains:,}
+        **Extensions:** All
+        """)
+
+with st.sidebar.expander("⚡ Performance Settings", expanded=False):
+    enum_workers = st.number_input(
+        "Enumeration Workers",
+        min_value=5,
+        max_value=50,
+        value=10,
+        step=5,
+        help="Parallel workers for subfinder"
+    )
+
+    scan_workers = st.number_input(
+        "Scanning Workers",
+        min_value=10,
+        max_value=100,
+        value=30,
+        step=10,
+        help="Parallel workers for vulnerability checks"
+    )
+
+st.sidebar.markdown("---")
+
+# PoC Generator in Sidebar
+if OUTPUT_FILE.exists() or VERIFIED_FILE.exists():
+    st.sidebar.subheader("🎯 PoC Generator")
+
+    # Load results for auto-population
+    available_results = []
+    if DETAILED_FILE.exists():
+        import csv
+        with open(DETAILED_FILE, 'r') as f:
+            reader = csv.DictReader(f)
+            available_results = list(reader)
+
+    with st.sidebar.expander("Generate PoCs", expanded=False):
+        st.write(f"**Found {len(available_results)} results**")
+
+        if st.session_state.creds['profile'].get('researcher_name'):
+            if available_results:
+                # Bulk generation option
+                if st.button("🚀 Generate All PoCs", use_container_width=True):
+                    st.session_state.bulk_generate = True
+                    st.rerun()
+
+                st.markdown("---")
+                st.write("**Or select one:**")
+
+                # Select specific result
+                result_options = [f"{r['subdomain']} ({r['service']})" for r in available_results[:20]]
+                selected = st.selectbox("Choose subdomain", ["Select..."] + result_options)
+
+                if selected != "Select...":
+                    idx = result_options.index(selected)
+                    st.session_state.selected_result = available_results[idx]
+                    if st.button("Generate PoC for Selected", use_container_width=True):
+                        st.session_state.show_poc_form = True
+                        st.rerun()
+            else:
+                st.info("No results yet. Run a scan first!")
+        else:
+            st.warning("⚠️ Set your profile first!")
+
+st.sidebar.markdown("---")
+
+# Check if any scan is running
+scan_running = PROGRESS_FILE.exists()
+pipeline_running = PIPELINE_PROGRESS.exists()
+any_running = scan_running or pipeline_running
+
+# Status display
+col1, col2, col3 = st.columns(3)
+
+status_text = "Ready"
+phase_text = "Idle"
+progress_val = 0
+
+# Check pipeline status first (takes priority)
+if PIPELINE_STATUS.exists():
+    with open(PIPELINE_STATUS) as f:
+        lines = f.readlines()
+        if lines:
+            phase_text = lines[0].strip()
+            if len(lines) > 1:
+                status_text = lines[1].strip()
+
+    if PIPELINE_PROGRESS.exists():
+        try:
+            with open(PIPELINE_PROGRESS) as f:
+                progress_val = int(f.read().strip())
+        except:
+            progress_val = 0
+# Fall back to individual scan status
+elif STATUS_FILE.exists():
+    with open(STATUS_FILE) as f:
+        lines = f.readlines()
+        if lines:
+            status_text = lines[0].strip()
+            if len(lines) > 1:
+                phase_text = lines[1].strip()
+
+    if PROGRESS_FILE.exists():
+        try:
+            with open(PROGRESS_FILE) as f:
+                progress_val = int(f.read().strip())
+        except:
+            progress_val = 0
+
+with col1:
+    st.metric("Phase", phase_text)
+
+with col2:
+    st.metric("Status", status_text)
+
+with col3:
+    # Count results
+    vuln_count = 0
+    if OUTPUT_FILE.exists():
+        with open(OUTPUT_FILE) as f:
+            vuln_count = len([l for l in f if l.strip() and not l.startswith(('=', 'Generated', 'Total', 'Subdomain'))])
+    st.metric("Vulnerabilities", vuln_count)
+
+# Progress bar
+if any_running:
+    st.progress(progress_val / 100)
+
+# Buttons
+st.markdown("### 🚀 Quick Actions")
+
+col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
+
+with col_btn1:
+    if st.button("🎯 Run Complete Scan (Scan → Verify → Analyze)", disabled=any_running, type="primary", use_container_width=True):
+        # Clean old files
+        for f in [OUTPUT_FILE, DETAILED_FILE, VERIFIED_FILE, VERIFIED_CSV, NICHE_CSV,
+                  PROGRESS_FILE, STATUS_FILE, VERIFY_PROGRESS, VERIFY_STATUS,
+                  NICHE_PROGRESS, NICHE_STATUS, PIPELINE_PROGRESS, PIPELINE_STATUS]:
+            if f.exists():
+                f.unlink()
+
+        # Create runner script
+        extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
+        runner_script = Path("run_complete_bg.sh")
+        runner_script.write_text(f"""#!/bin/bash
+source venv/bin/activate
+python complete_pipeline.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers}
+""")
+        runner_script.chmod(0o755)
+
+        # Start complete pipeline in background
+        subprocess.Popen(['./run_complete_bg.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        time.sleep(1)
+        st.rerun()
+
+with col_btn2:
+    if st.button("🔍 Scan Only", disabled=any_running, type="secondary", use_container_width=True):
+        # Clean old files
+        for f in [OUTPUT_FILE, DETAILED_FILE, PROGRESS_FILE, STATUS_FILE]:
+            if f.exists():
+                f.unlink()
+
+        # Create runner script
+        extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
+        runner_script = Path("run_scan_bg.sh")
+        runner_script.write_text(f"""#!/bin/bash
+source venv/bin/activate
+python aggressive_scanner.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers}
+""")
+        runner_script.chmod(0o755)
+
+        # Start scan in background
+        subprocess.Popen(['./run_scan_bg.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        time.sleep(1)
+        st.rerun()
+
+with col_btn3:
+    if st.button("⏹️ Stop", disabled=not any_running, type="secondary", use_container_width=True):
+        # Kill all processes
+        subprocess.run(['pkill', '-f', 'complete_pipeline.py'], capture_output=True)
+        subprocess.run(['pkill', '-f', 'aggressive_scanner.py'], capture_output=True)
+        subprocess.run(['pkill', '-f', 'verify_results.py'], capture_output=True)
+        subprocess.run(['pkill', '-f', 'niche_analyzer.py'], capture_output=True)
+        subprocess.run(['pkill', '-f', 'run_scan_bg.sh'], capture_output=True)
+        subprocess.run(['pkill', '-f', 'run_complete_bg.sh'], capture_output=True)
+        subprocess.run(['pkill', '-f', 'subfinder'], capture_output=True)
+
+        # Clean up progress files
+        for f in [PROGRESS_FILE, STATUS_FILE, VERIFY_PROGRESS, VERIFY_STATUS,
+                  NICHE_PROGRESS, NICHE_STATUS, PIPELINE_PROGRESS, PIPELINE_STATUS]:
+            if f.exists():
+                f.unlink()
+        st.rerun()
+
+# Live log
+st.markdown("---")
+with st.expander("📜 Activity Log", expanded=False):
+    if STATUS_FILE.exists():
+        with open(STATUS_FILE) as f:
+            all_lines = f.readlines()
+            if len(all_lines) > 2:
+                for line in all_lines[2:]:  # Skip first 2 lines (status/phase)
+                    st.text(line.strip())
+    else:
+        st.info("No activity. Click 'Start Scan' to begin.")
+
+# Results
+if OUTPUT_FILE.exists():
+    st.markdown("---")
+    st.subheader(f"🚨 Results")
+
+    with open(OUTPUT_FILE) as f:
+        content = f.read()
+
+    st.text_area("Findings", content, height=400)
+
+    # Download buttons
+    col_dl1, col_dl2 = st.columns(2)
+
+    with col_dl1:
+        with open(OUTPUT_FILE, 'rb') as f:
+            st.download_button(
+                label="📥 Download TXT Report",
+                data=f,
+                file_name=OUTPUT_FILE.name,
+                mime="text/plain",
+                use_container_width=True
+            )
+
+    with col_dl2:
+        if DETAILED_FILE.exists():
+            with open(DETAILED_FILE, 'rb') as f:
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=f,
+                    file_name=DETAILED_FILE.name,
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+    st.success(f"""
+    ✅ **Results saved to Desktop:**
+    - `{OUTPUT_FILE.name}`
+    - `{DETAILED_FILE.name}` (CSV)
+
+    Use the download buttons above to get copies!
+    """)
+
+    # Check if there are "Active" results to verify
+    if DETAILED_FILE.exists():
+        import csv
+        with open(DETAILED_FILE, 'r') as f:
+            reader = csv.DictReader(f)
+            results = list(reader)
+            active_count = len([r for r in results if 'Active' in r.get('status', '')])
+
+        if active_count > 0:
+            st.markdown("---")
+            st.subheader("🔬 Deep Verification")
+            st.info(f"""
+            Found **{active_count}** subdomains marked as "Active (verify manually)".
+
+            Run deep verification to check if these are actually vulnerable by testing HTTP responses for takeover signatures.
+            """)
+
+            verify_running = VERIFY_PROGRESS.exists()
+
+            col_verify1, col_verify2 = st.columns([1, 1])
+
+            with col_verify1:
+                if st.button("🔬 Run Deep Verification", disabled=verify_running, type="primary", use_container_width=True):
+                    # Clean old verification files
+                    for f in [VERIFIED_FILE, VERIFIED_CSV, VERIFY_PROGRESS, VERIFY_STATUS]:
+                        if f.exists():
+                            f.unlink()
+
+                    # Create verification runner
+                    verify_script = Path("run_verify_bg.sh")
+                    verify_script.write_text("""#!/bin/bash
+source venv/bin/activate
+python verify_results.py
+""")
+                    verify_script.chmod(0o755)
+
+                    # Start verification in background
+                    subprocess.Popen(['./run_verify_bg.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    time.sleep(1)
+                    st.rerun()
+
+            with col_verify2:
+                if st.button("⏹️ Stop Verification", disabled=not verify_running, type="secondary", use_container_width=True):
+                    subprocess.run(['pkill', '-f', 'verify_results.py'], capture_output=True)
+                    for f in [VERIFY_PROGRESS, VERIFY_STATUS]:
+                        if f.exists():
+                            f.unlink()
+                    st.rerun()
+
+            # Show verification progress
+            if verify_running:
+                st.markdown("### 🔄 Verification in Progress...")
+                if VERIFY_STATUS.exists():
+                    with open(VERIFY_STATUS) as f:
+                        verify_lines = f.readlines()
+                        if verify_lines:
+                            for line in verify_lines:
+                                st.text(line.strip())
+
+# Display verified results
+if VERIFIED_FILE.exists():
+    st.markdown("---")
+    st.subheader("✅ Verified Vulnerabilities")
+
+    with open(VERIFIED_FILE) as f:
+        verified_content = f.read()
+
+    st.text_area("Verified High-Confidence Takeovers", verified_content, height=400)
+
+    # Download verified results
+    col_ver1, col_ver2 = st.columns(2)
+
+    with col_ver1:
+        with open(VERIFIED_FILE, 'rb') as f:
+            st.download_button(
+                label="📥 Download Verified TXT",
+                data=f,
+                file_name=VERIFIED_FILE.name,
+                mime="text/plain",
+                use_container_width=True
+            )
+
+    with col_ver2:
+        if VERIFIED_CSV.exists():
+            with open(VERIFIED_CSV, 'rb') as f:
+                st.download_button(
+                    label="📥 Download Verified CSV",
+                    data=f,
+                    file_name=VERIFIED_CSV.name,
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+    st.success(f"""
+    🎯 **Verified results saved to Desktop:**
+    - `{VERIFIED_FILE.name}`
+    - `{VERIFIED_CSV.name}` (CSV)
+
+    These are high-confidence subdomain takeover vulnerabilities!
+    """)
+
+    # Niche Analysis Section
+    st.markdown("---")
+    st.subheader("💰 Affiliate Niche Analysis")
+    st.info("""
+    **Understand what affiliate marketers look for:**
+
+    This analysis identifies what niche each subdomain belongs to and estimates its value
+    for affiliate marketing. This helps you understand why certain subdomains are targeted.
+    """)
+
+    niche_running = NICHE_PROGRESS.exists()
+
+    col_niche1, col_niche2 = st.columns([1, 1])
+
+    with col_niche1:
+        if st.button("🎯 Analyze Niches", disabled=niche_running, type="primary", use_container_width=True):
+            # Clean old niche files
+            for f in [NICHE_CSV, NICHE_PROGRESS, NICHE_STATUS]:
+                if f.exists():
+                    f.unlink()
+
+            # Create niche analysis runner
+            niche_script = Path("run_niche_bg.sh")
+            niche_script.write_text("""#!/bin/bash
+source venv/bin/activate
+python niche_analyzer.py
+""")
+            niche_script.chmod(0o755)
+
+            # Start niche analysis in background
+            subprocess.Popen(['./run_niche_bg.sh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1)
+            st.rerun()
+
+    with col_niche2:
+        if st.button("⏹️ Stop Analysis", disabled=not niche_running, type="secondary", use_container_width=True):
+            subprocess.run(['pkill', '-f', 'niche_analyzer.py'], capture_output=True)
+            for f in [NICHE_PROGRESS, NICHE_STATUS]:
+                if f.exists():
+                    f.unlink()
+            st.rerun()
+
+    # Show niche analysis progress
+    if niche_running:
+        st.markdown("### 🔄 Analyzing Niches...")
+        if NICHE_STATUS.exists():
+            with open(NICHE_STATUS) as f:
+                niche_lines = f.readlines()
+                if niche_lines:
+                    for line in niche_lines:
+                        st.text(line.strip())
+
+# Display niche analysis results
+if NICHE_CSV.exists():
+    st.markdown("---")
+    st.subheader("💰 Niche Analysis Results")
+
+    # Load and display the CSV
+    import pandas as pd
+    df = pd.read_csv(NICHE_CSV)
+
+    # Show summary stats
+    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+
+    with col_stat1:
+        high_trust = len(df[df['trust_score'] >= 80]) if 'trust_score' in df.columns else 0
+        st.metric("High Trust (80+)", high_trust)
+
+    with col_stat2:
+        high_value = len(df[df['seo_value'].isin(['High', 'Very High'])])
+        st.metric("High SEO Value", high_value)
+
+    with col_stat3:
+        avg_da = df['actual_da'].mean() if 'actual_da' in df.columns and df['actual_da'].any() else 0
+        st.metric("Avg DA", f"{avg_da:.0f}/100" if avg_da > 0 else "N/A")
+
+    with col_stat4:
+        top_niche = df['niche'].value_counts().index[0] if len(df) > 0 else "N/A"
+        st.metric("Top Niche", top_niche)
+
+    # Show the data table
+    st.markdown("### 📊 Detailed Niche Breakdown")
+    st.dataframe(df, use_container_width=True, height=400)
+
+    # Download buttons
+    col_dl1, col_dl2, col_dl3 = st.columns(3)
+
+    with col_dl1:
+        with open(NICHE_CSV, 'rb') as f:
+            st.download_button(
+                label="📥 Full Analysis CSV",
+                data=f,
+                file_name=NICHE_CSV.name,
+                mime="text/csv",
+                use_container_width=True
+            )
+
+    with col_dl2:
+        # Check for top priority targets file
+        top_priority_file = NICHE_FOLDER / "top_priority_targets.csv"
+        if top_priority_file.exists():
+            with open(top_priority_file, 'rb') as f:
+                st.download_button(
+                    label="🎯 Top Priority (Trust 60+)",
+                    data=f,
+                    file_name="top_priority_targets.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        else:
+            # Create filtered high-trust CSV on the fly
+            high_trust_df = df[df['trust_score'] >= 60] if 'trust_score' in df.columns else df[df['seo_value'].isin(['High', 'Very High'])]
+            if len(high_trust_df) > 0:
+                high_trust_csv = high_trust_df.to_csv(index=False)
+                st.download_button(
+                    label="🎯 Top Priority (Trust 60+)",
+                    data=high_trust_csv,
+                    file_name="top_priority_targets.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+    with col_dl3:
+        # Create filtered high-value CSV
+        high_value_df = df[df['seo_value'].isin(['High', 'Very High'])]
+        if len(high_value_df) > 0:
+            high_value_csv = high_value_df.to_csv(index=False)
+            st.download_button(
+                label="💰 High SEO Value Only",
+                data=high_value_csv,
+                file_name="high_seo_value.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+    # Show insights
+    st.markdown("### 💡 Key Insights")
+
+    # Group by niche
+    niche_counts = df['niche'].value_counts()
+
+    col_insight1, col_insight2 = st.columns(2)
+
+    with col_insight1:
+        st.markdown("**Niche Distribution:**")
+        for niche, count in niche_counts.head(5).items():
+            st.write(f"• {niche}: {count} subdomains")
+
+    with col_insight2:
+        st.markdown("**SEO Value Distribution:**")
+        seo_counts = df['seo_value'].value_counts()
+        for seo, count in seo_counts.items():
+            st.write(f"• {seo}: {count} subdomains")
+
+    # Top opportunities - sort by trust score if available
+    st.markdown("### 🎯 Top Priority Targets")
+
+    # Sort by trust score (if available) or SEO value
+    if 'trust_score' in df.columns:
+        top_opps = df.sort_values(by=['trust_score', 'actual_da'], ascending=[False, False]).head(10)
+        sort_label = "Trust Score"
+    else:
+        top_opps = df.sort_values(by=['seo_value', 'niche_confidence'], ascending=[False, False]).head(10)
+        sort_label = "SEO Value"
+
+    for idx, row in top_opps.iterrows():
+        # Create header with trust score badge
+        trust_badge = f"[Trust: {int(row['trust_score'])}/100] " if 'trust_score' in row and row['trust_score'] > 0 else ""
+        rank_badge = f"#{int(row['priority_rank'])} " if 'priority_rank' in row and row['priority_rank'] > 0 else ""
+
+        with st.expander(f"{rank_badge}{trust_badge}{row['subdomain']} - {row['niche']} ({row['seo_value']} SEO value)"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if 'priority_rank' in row and row['priority_rank'] > 0:
+                    st.write(f"**Priority Rank:** #{int(row['priority_rank'])}")
+                if 'trust_score' in row and row['trust_score'] > 0:
+                    st.write(f"**Trust Score:** {int(row['trust_score'])}/100")
+                st.write(f"**Niche:** {row['niche']}")
+                st.write(f"**Confidence:** {row['niche_confidence']}")
+                st.write(f"**Service:** {row['service']}")
+                st.write(f"**Parent Domain:** {row['parent_domain']}")
+
+            with col2:
+                st.write(f"**Affiliate Products:** {row['affiliate_products']}")
+                st.write(f"**Potential Value:** {row['affiliate_value']}")
+                st.write(f"**Domain Authority:** {row['domain_authority']}")
+                if 'actual_da' in row and row['actual_da'] > 0:
+                    st.write(f"**Actual DA:** {int(row['actual_da'])}/100")
+                    st.write(f"**Total Backlinks:** {int(row['total_backlinks']):,}")
+                    st.write(f"**Linking Domains:** {int(row['linking_domains']):,}")
+                    if 'spam_score' in row:
+                        st.write(f"**Spam Score:** {int(row['spam_score'])}/100")
+                    st.write(f"**DR Source:** {row['dr_source']}")
+                st.write(f"**Historical Content:** {row['historical_content']}")
+
+    st.success(f"""
+    ✅ **Niche analysis complete!**
+    - Analyzed {len(df)} subdomains
+    - Found {high_value} high-value targets
+    - Results saved to: `{NICHE_CSV.name}`
+
+    **Use this data to understand:**
+    - What niches affiliate marketers target
+    - Which subdomains have highest SEO value
+    - What products they would promote
+    """)
+
+# Bulk PoC Generation
+if st.session_state.get('bulk_generate'):
+    st.markdown("---")
+    st.subheader("🚀 Bulk PoC Generation")
+
+    if not st.session_state.creds['profile'].get('researcher_name'):
+        st.error("Please set your profile in the sidebar first!")
+        st.session_state.bulk_generate = False
+    else:
+        # Load all results
+        import csv
+        import zipfile
+        import io
+
+        with open(DETAILED_FILE, 'r') as f:
+            reader = csv.DictReader(f)
+            all_results = list(reader)
+
+        st.info(f"Generating PoCs for {len(all_results)} vulnerabilities...")
+
+        # Group by service
+        by_service = {}
+        for result in all_results:
+            service = result['service'].lower()
+            if service not in by_service:
+                by_service[service] = []
+            by_service[service].append(result)
+
+        # Generate all PoCs
+        all_files = []
+        researcher_name = st.session_state.creds['profile']['researcher_name']
+
+        for service, results in by_service.items():
+            st.write(f"**{service.title()}**: {len(results)} found")
+
+            for result in results:
+                subdomain = result['subdomain']
+                cname = result.get('cname', '')
+
+                # Extract service-specific info and use saved credentials
+                if 's3' in service:
+                    bucket_name = cname.split('.')[0] if cname else subdomain.split('.')[0]
+                    region = st.session_state.creds['aws'].get('default_region', 'us-east-1')
+                    poc_data = poc.gen_s3(subdomain, bucket_name, region, researcher_name)
+
+                    # Add AWS credentials to commands if set
+                    aws_key = st.session_state.creds['aws'].get('access_key_id', '')
+                    aws_secret = st.session_state.creds['aws'].get('secret_access_key', '')
+                    if aws_key and aws_secret:
+                        poc_data['commands'] = f"""# AWS Credentials (configured)
+export AWS_ACCESS_KEY_ID={aws_key}
+export AWS_SECRET_ACCESS_KEY={aws_secret}
+export AWS_DEFAULT_REGION={region}
+
+""" + poc_data['commands']
+
+                elif 'azure' in service:
+                    app_name = cname.split('.')[0] if cname else subdomain.split('.')[0]
+                    location = st.session_state.creds['azure'].get('default_location', 'eastus')
+                    poc_data = poc.gen_azure(subdomain, app_name, location, researcher_name)
+
+                    # Add Azure subscription if set
+                    azure_sub = st.session_state.creds['azure'].get('subscription_id', '')
+                    if azure_sub:
+                        poc_data['commands'] = f"az account set --subscription {azure_sub}\n\n" + poc_data['commands']
+
+                elif 'github' in service:
+                    github_cname = cname.replace('.github.io', '') if cname else subdomain.split('.')[0]
+                    github_user = st.session_state.creds['github'].get('username', 'your-github')
+                    poc_data = poc.gen_github(subdomain, github_cname, github_user, researcher_name)
+
+                    # Add GitHub token auth if set
+                    github_token = st.session_state.creds['github'].get('personal_access_token', '')
+                    if github_token:
+                        poc_data['commands'] = f"export GITHUB_TOKEN={github_token}\n\n" + poc_data['commands']
+
+                elif 'heroku' in service:
+                    app_name = cname.replace('.herokuapp.com', '') if cname else subdomain.split('.')[0]
+                    poc_data = poc.gen_heroku(subdomain, app_name, researcher_name)
+
+                    # Add Heroku API key if set
+                    heroku_key = st.session_state.creds['heroku'].get('api_key', '')
+                    if heroku_key:
+                        poc_data['commands'] = f"export HEROKU_API_KEY={heroku_key}\n\n" + poc_data['commands']
+
+                else:
+                    continue  # Skip unsupported services for now
+
+                # Add files to collection
+                for filename, content in poc_data.get('files', []):
+                    safe_subdomain = subdomain.replace('.', '_')
+                    all_files.append((f"{safe_subdomain}/{filename}", content))
+
+        # Create ZIP file
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for filename, content in all_files:
+                zip_file.writestr(filename, content)
+
+        zip_buffer.seek(0)
+
+        st.success(f"✅ Generated {len(all_files)} files for {len(all_results)} vulnerabilities!")
+
+        st.download_button(
+            label="📥 Download All PoCs (ZIP)",
+            data=zip_buffer,
+            file_name=f"pocs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+            use_container_width=True
+        )
+
+        if st.button("Done"):
+            st.session_state.bulk_generate = False
+            st.rerun()
+
+# Single PoC Generation
+elif st.session_state.get('show_poc_form'):
+    st.markdown("---")
+    st.subheader("📝 Generate Single PoC")
+
+    result = st.session_state.selected_result
+    subdomain = result['subdomain']
+    service_name = result['service']
+    cname = result.get('cname', '')
+    researcher_name = st.session_state.creds['profile']['researcher_name']
+
+    st.info(f"**Subdomain:** {subdomain}\n**Service:** {service_name}\n**CNAME:** {cname}")
+
+    # Auto-extract service-specific details
+    if 's3' in service_name.lower():
+        bucket_name = cname.split('.')[0] if cname else subdomain.split('.')[0]
+        default_region = st.session_state.creds['aws'].get('default_region', 'us-east-1')
+        region = st.selectbox("AWS Region", ["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1"],
+                             index=["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1"].index(default_region) if default_region in ["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1"] else 0)
+
+        if st.button("Generate S3 PoC"):
+            poc_data = poc.gen_s3(subdomain, bucket_name, region, researcher_name)
+
+            # Add AWS credentials
+            aws_key = st.session_state.creds['aws'].get('access_key_id', '')
+            aws_secret = st.session_state.creds['aws'].get('secret_access_key', '')
+            if aws_key and aws_secret:
+                poc_data['commands'] = f"""# AWS Credentials (configured)
+export AWS_ACCESS_KEY_ID={aws_key}
+export AWS_SECRET_ACCESS_KEY={aws_secret}
+export AWS_DEFAULT_REGION={region}
+
+""" + poc_data['commands']
+
+            st.success("✅ PoC Generated!")
+            st.code(poc_data['commands'], language='bash')
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.download_button("📥 HTML", poc_data['html'], f"poc_{bucket_name}.html", "text/html")
+            with col2:
+                st.download_button("📥 Commands", poc_data['commands'], f"poc_{bucket_name}.sh", "text/plain")
+            with col3:
+                st.download_button("📥 CNAME", poc_data['cname'], "CNAME", "text/plain")
+
+    elif 'azure' in service_name.lower():
+        app_name = cname.split('.')[0] if cname else subdomain.split('.')[0]
+        default_location = st.session_state.creds['azure'].get('default_location', 'eastus')
+        location = st.selectbox("Azure Location", ["eastus", "westus", "westus2", "northeurope", "westeurope"],
+                               index=["eastus", "westus", "westus2", "northeurope", "westeurope"].index(default_location) if default_location in ["eastus", "westus", "westus2", "northeurope", "westeurope"] else 0)
+
+        if st.button("Generate Azure PoC"):
+            poc_data = poc.gen_azure(subdomain, app_name, location, researcher_name)
+
+            # Add Azure subscription
+            azure_sub = st.session_state.creds['azure'].get('subscription_id', '')
+            if azure_sub:
+                poc_data['commands'] = f"az account set --subscription {azure_sub}\n\n" + poc_data['commands']
+
+            st.success("✅ PoC Generated!")
+            st.code(poc_data['commands'], language='bash')
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.download_button("📥 HTML", poc_data['html'], f"poc_{app_name}.html", "text/html")
+            with col2:
+                st.download_button("📥 Commands", poc_data['commands'], f"poc_{app_name}.sh", "text/plain")
+            with col3:
+                st.download_button("📥 CNAME", poc_data['cname'], "CNAME", "text/plain")
+
+    elif 'github' in service_name.lower():
+        github_cname = cname.replace('.github.io', '') if cname else subdomain.split('.')[0]
+        github_user = st.session_state.creds['github'].get('username', 'your-github')
+
+        if st.button("Generate GitHub PoC"):
+            poc_data = poc.gen_github(subdomain, github_cname, github_user, researcher_name)
+
+            # Add GitHub token if set
+            github_token = st.session_state.creds['github'].get('personal_access_token', '')
+            if github_token:
+                poc_data['commands'] = f"export GITHUB_TOKEN={github_token}\n\n" + poc_data['commands']
+
+            st.success("✅ PoC Generated!")
+            st.code(poc_data['commands'], language='bash')
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.download_button("📥 HTML", poc_data['html'], f"poc_{github_cname}.html", "text/html")
+            with col2:
+                st.download_button("📥 Commands", poc_data['commands'], f"poc_{github_cname}.sh", "text/plain")
+            with col3:
+                st.download_button("📥 CNAME", poc_data['cname'], "CNAME", "text/plain")
+
+    elif 'heroku' in service_name.lower():
+        app_name = cname.replace('.herokuapp.com', '') if cname else subdomain.split('.')[0]
+
+        if st.button("Generate Heroku PoC"):
+            poc_data = poc.gen_heroku(subdomain, app_name, researcher_name)
+
+            # Add Heroku API key if set
+            heroku_key = st.session_state.creds['heroku'].get('api_key', '')
+            if heroku_key:
+                poc_data['commands'] = f"export HEROKU_API_KEY={heroku_key}\n\n" + poc_data['commands']
+
+            st.success("✅ PoC Generated!")
+            st.code(poc_data['commands'], language='bash')
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.download_button("📥 HTML", poc_data['html'], f"poc_{app_name}.html", "text/html")
+            with col2:
+                st.download_button("📥 Commands", poc_data['commands'], f"poc_{app_name}.sh", "text/plain")
+            with col3:
+                st.download_button("📥 CNAME", poc_data['cname'], "CNAME", "text/plain")
+
+    else:
+        st.warning(f"PoC generator for {service_name} coming soon!")
+
+    if st.button("← Back"):
+        st.session_state.show_poc_form = False
+        st.rerun()
+
+# Keep old PoC section at bottom for manual entry
+elif 'poc_service' in st.session_state:
+        service = st.session_state.poc_service
+
+        st.markdown("---")
+
+        if service == 's3':
+            st.markdown("### 🪣 AWS S3 Bucket Takeover PoC")
+
+            with st.form("s3_poc_form"):
+                subdomain = st.text_input("Vulnerable Subdomain", placeholder="old-app.company.com")
+                bucket_name = st.text_input("S3 Bucket Name from CNAME", placeholder="old-app")
+                region = st.selectbox("AWS Region", ["us-east-1", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-southeast-2"])
+                researcher = st.text_input("Your Bug Bounty Username", placeholder="researcher123")
+
+                submit = st.form_submit_button("Generate PoC Commands")
+
+                if submit and subdomain and bucket_name and researcher:
+                    poc_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Subdomain Takeover - PoC</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }}
+        .container {{ background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1 {{ color: #d9534f; }}
+        .info {{ background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }}
+        .contact {{ background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 AWS S3 Subdomain Takeover Detected</h1>
+        <div class="info">
+            <h2>Vulnerability Details</h2>
+            <p><strong>Vulnerable Subdomain:</strong> {subdomain}</p>
+            <p><strong>Service Type:</strong> AWS S3 Bucket</p>
+            <p><strong>Bucket Name:</strong> {bucket_name}</p>
+            <p><strong>Region:</strong> {region}</p>
+            <p><strong>Discovered Date:</strong> {datetime.now().strftime('%Y-%m-%d')}</p>
+        </div>
+        <div class="contact">
+            <h2>Security Researcher</h2>
+            <p><strong>Researcher:</strong> {researcher}</p>
+        </div>
+        <h2>What is Subdomain Takeover?</h2>
+        <p>This subdomain was pointing to a non-existent S3 bucket. An attacker could create a bucket with the same name and host malicious content.</p>
+        <h2>Proof of Concept</h2>
+        <p>This page demonstrates control over the subdomain. <strong>No malicious actions have been taken.</strong></p>
+        <h2>Recommended Fix</h2>
+        <ul>
+            <li>Remove the DNS CNAME record</li>
+            <li>If needed, reclaim the bucket in AWS</li>
+            <li>Implement DNS monitoring</li>
+        </ul>
+        <p style="text-align: center; margin-top: 30px; color: #666;">
+            <small>Responsible security disclosure for bug bounty purposes only.</small>
+        </p>
+    </div>
+</body>
+</html>"""
+
+                    commands = f"""# AWS S3 Takeover PoC Commands
+# Copy and run these in your terminal
+
+# 1. Create S3 bucket
+aws s3 mb s3://{bucket_name} --region {region}
+
+# 2. Enable static website hosting
+aws s3 website s3://{bucket_name} --index-document index.html
+
+# 3. Create bucket policy file
+cat > /tmp/bucket-policy.json << 'EOF'
+{{
+  "Version": "2012-10-17",
+  "Statement": [{{
+    "Sid": "PublicReadGetObject",
+    "Effect": "Allow",
+    "Principal": "*",
+    "Action": "s3:GetObject",
+    "Resource": "arn:aws:s3:::{bucket_name}/*"
+  }}]
+}}
+EOF
+
+# 4. Apply public read policy
+aws s3api put-bucket-policy --bucket {bucket_name} --policy file:///tmp/bucket-policy.json
+
+# 5. Upload PoC HTML (save the HTML below first)
+aws s3 cp index.html s3://{bucket_name}/index.html --content-type "text/html"
+
+# 6. Verify takeover
+curl http://{bucket_name}.s3-website-{region}.amazonaws.com
+
+# 7. CLEANUP after bug bounty confirmation
+aws s3 rb s3://{bucket_name} --force
+"""
+
+                    st.success("✅ PoC Generated!")
+                    st.markdown("### 📋 Commands to Run:")
+                    st.code(commands, language="bash")
+
+                    st.markdown("### 📄 PoC HTML File:")
+                    st.code(poc_html, language="html")
+
+                    st.download_button(
+                        label="📥 Download PoC HTML",
+                        data=poc_html,
+                        file_name=f"poc_{bucket_name}.html",
+                        mime="text/html"
+                    )
+
+                    st.download_button(
+                        label="📥 Download Commands",
+                        data=commands,
+                        file_name=f"poc_{bucket_name}_commands.sh",
+                        mime="text/plain"
+                    )
+
+        elif service == 'azure':
+            st.markdown("### ☁️ Microsoft Azure App Service Takeover PoC")
+
+            with st.form("azure_poc_form"):
+                subdomain = st.text_input("Vulnerable Subdomain", placeholder="old-app.company.com")
+                app_name = st.text_input("Azure App Name from CNAME", placeholder="old-app")
+                location = st.selectbox("Azure Location", ["eastus", "westus", "westus2", "centralus", "northeurope", "westeurope", "uksouth", "southeastasia"])
+                researcher = st.text_input("Your Bug Bounty Username", placeholder="researcher123")
+
+                submit = st.form_submit_button("Generate PoC Commands")
+
+                if submit and subdomain and app_name and researcher:
+                    resource_group = f"bugbounty-poc-{app_name}"
+
+                    poc_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Subdomain Takeover - PoC</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }}
+        .container {{ background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1 {{ color: #d9534f; }}
+        .info {{ background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }}
+        .contact {{ background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 Azure Subdomain Takeover Detected</h1>
+        <div class="info">
+            <h2>Vulnerability Details</h2>
+            <p><strong>Vulnerable Subdomain:</strong> {subdomain}</p>
+            <p><strong>Service Type:</strong> Microsoft Azure App Service</p>
+            <p><strong>App Name:</strong> {app_name}.azurewebsites.net</p>
+            <p><strong>Discovered Date:</strong> {datetime.now().strftime('%Y-%m-%d')}</p>
+        </div>
+        <div class="contact">
+            <h2>Security Researcher</h2>
+            <p><strong>Researcher:</strong> {researcher}</p>
+        </div>
+        <h2>What is Subdomain Takeover?</h2>
+        <p>This subdomain was pointing to an unclaimed Azure App Service. An attacker could claim it and host malicious content.</p>
+        <h2>Proof of Concept</h2>
+        <p>This page demonstrates control over the subdomain. <strong>No malicious actions have been taken.</strong></p>
+        <h2>Recommended Fix</h2>
+        <ul>
+            <li>Remove the DNS CNAME record</li>
+            <li>If needed, reclaim the app in Azure Portal</li>
+            <li>Implement DNS monitoring</li>
+        </ul>
+        <p style="text-align: center; margin-top: 30px; color: #666;">
+            <small>Responsible security disclosure for bug bounty purposes only.</small>
+        </p>
+    </div>
+</body>
+</html>"""
+
+                    commands = f"""# Azure App Service Takeover PoC Commands
+# Copy and run these in your terminal
+
+# 1. Login to Azure
+az login
+
+# 2. Create resource group
+az group create --name {resource_group} --location {location}
+
+# 3. Create app service plan (Free tier)
+az appservice plan create --name poc-plan --resource-group {resource_group} --sku FREE
+
+# 4. Create web app
+az webapp create --name {app_name} --resource-group {resource_group} --plan poc-plan
+
+# 5. Create deployment package
+mkdir -p /tmp/azure-deploy
+# Save the PoC HTML as /tmp/azure-deploy/index.html
+cd /tmp/azure-deploy
+zip -r ../deploy.zip .
+
+# 6. Deploy to Azure
+az webapp deployment source config-zip --resource-group {resource_group} --name {app_name} --src /tmp/deploy.zip
+
+# 7. Verify takeover
+curl https://{app_name}.azurewebsites.net
+
+# 8. CLEANUP after bug bounty confirmation
+az group delete --name {resource_group} --yes
+"""
+
+                    st.success("✅ PoC Generated!")
+                    st.markdown("### 📋 Commands to Run:")
+                    st.code(commands, language="bash")
+
+                    st.markdown("### 📄 PoC HTML File:")
+                    st.code(poc_html, language="html")
+
+                    st.download_button(
+                        label="📥 Download PoC HTML",
+                        data=poc_html,
+                        file_name=f"poc_{app_name}.html",
+                        mime="text/html"
+                    )
+
+                    st.download_button(
+                        label="📥 Download Commands",
+                        data=commands,
+                        file_name=f"poc_{app_name}_commands.sh",
+                        mime="text/plain"
+                    )
+
+        elif service == 'github':
+            st.markdown("### 📄 GitHub Pages Takeover PoC")
+
+            with st.form("github_poc_form"):
+                subdomain = st.text_input("Vulnerable Subdomain", placeholder="docs.company.com")
+                github_cname = st.text_input("GitHub Username from CNAME", placeholder="company-docs (from company-docs.github.io)")
+                your_github = st.text_input("Your GitHub Username", placeholder="your-username")
+                researcher = st.text_input("Your Bug Bounty Username", placeholder="researcher123")
+
+                submit = st.form_submit_button("Generate PoC Instructions")
+
+                if submit and subdomain and github_cname and your_github and researcher:
+                    poc_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Pages Subdomain Takeover - PoC</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; background: #f5f5f5; }}
+        .container {{ background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1 {{ color: #d9534f; }}
+        .info {{ background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }}
+        .contact {{ background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 GitHub Pages Subdomain Takeover Detected</h1>
+        <div class="info">
+            <h2>Vulnerability Details</h2>
+            <p><strong>Vulnerable Subdomain:</strong> {subdomain}</p>
+            <p><strong>Service Type:</strong> GitHub Pages</p>
+            <p><strong>Original CNAME:</strong> {github_cname}.github.io</p>
+            <p><strong>Discovered Date:</strong> {datetime.now().strftime('%Y-%m-%d')}</p>
+        </div>
+        <div class="contact">
+            <h2>Security Researcher</h2>
+            <p><strong>Researcher:</strong> {researcher}</p>
+        </div>
+        <h2>What is Subdomain Takeover?</h2>
+        <p>This subdomain was pointing to an unclaimed GitHub Pages site. An attacker could claim it and host malicious content.</p>
+        <h2>Proof of Concept</h2>
+        <p>This page demonstrates control over the subdomain. <strong>No malicious actions have been taken.</strong></p>
+        <h2>Recommended Fix</h2>
+        <ul>
+            <li>Remove the DNS CNAME record</li>
+            <li>If needed, recreate the GitHub Pages site</li>
+            <li>Implement DNS monitoring</li>
+        </ul>
+        <p style="text-align: center; margin-top: 30px; color: #666;">
+            <small>Responsible security disclosure for bug bounty purposes only.</small>
+        </p>
+    </div>
+</body>
+</html>"""
+
+                    instructions = f"""# GitHub Pages Takeover PoC Instructions
+
+## Option 1: Create repository named {github_cname}.github.io
+
+1. Go to GitHub and create a new repository: https://github.com/new
+2. Name it: {github_cname}.github.io
+3. Make it public
+4. Clone the repo:
+   git clone https://github.com/{your_github}/{github_cname}.github.io.git
+   cd {github_cname}.github.io
+
+5. Add the PoC HTML as index.html
+6. Commit and push:
+   git add index.html
+   git commit -m "Bug bounty PoC"
+   git push origin main
+
+7. Go to Settings → Pages → Add custom domain: {subdomain}
+
+## Option 2: Try to register GitHub username "{github_cname}"
+
+If the username is available:
+1. Create new GitHub account with username: {github_cname}
+2. Create repository: {github_cname}.github.io
+3. Follow steps 4-7 above
+
+## Verification
+curl https://{subdomain}
+
+## CLEANUP after bug bounty confirmation
+Delete the repository from GitHub
+"""
+
+                    st.success("✅ PoC Instructions Generated!")
+                    st.markdown("### 📋 Instructions:")
+                    st.code(instructions, language="markdown")
+
+                    st.markdown("### 📄 PoC HTML File:")
+                    st.code(poc_html, language="html")
+
+                    st.download_button(
+                        label="📥 Download PoC HTML",
+                        data=poc_html,
+                        file_name=f"poc_{github_cname}.html",
+                        mime="text/html"
+                    )
+
+                    st.download_button(
+                        label="📥 Download Instructions",
+                        data=instructions,
+                        file_name=f"poc_{github_cname}_instructions.txt",
+                        mime="text/plain"
+                    )
+
+        if st.button("← Back to Service Selection"):
+            del st.session_state.poc_service
+            st.rerun()
+
+# Auto-refresh
+verify_running = VERIFY_PROGRESS.exists()
+niche_running = NICHE_PROGRESS.exists()
+if scan_running or verify_running or niche_running or pipeline_running:
+    time.sleep(2)
+    st.rerun()
