@@ -419,19 +419,19 @@ def run_subdominator(subdomains_file, output_file):
         return None, "Subdominator not found"
 
     try:
-        # Run Subdominator with validation
+        # Run Subdominator with validation (no timeout - can take a while for large lists)
         result = subprocess.run(
             [subdominator_path, '-l', str(subdomains_file), '-o', str(output_file),
              '--validate', '-q', '-t', '50'],
             capture_output=True,
-            text=True,
-            timeout=600
+            text=True
         )
 
-        if result.returncode == 0:
+        # Check if output file has results (Subdominator returns exit code 1 even on success)
+        if output_file.exists() and output_file.stat().st_size > 0:
             return output_file, None
         else:
-            return None, f"Subdominator failed: {result.stderr}"
+            return None, f"Subdominator failed: {result.stderr if result.stderr else 'No output generated'}"
     except subprocess.TimeoutExpired:
         return None, "Subdominator timed out"
     except Exception as e:
@@ -443,6 +443,21 @@ def parse_subdominator_output(output_file):
 
     if not output_file or not Path(output_file).exists():
         return vulnerabilities
+
+    # Services that are ACTUALLY vulnerable according to can-i-take-over-xyz
+    # https://github.com/EdOverflow/can-i-take-over-xyz
+    VULNERABLE_SERVICES = {
+        'AWS/S3', 'AWS/Elastic Beanstalk', 'Unbounce', 'Wix', 'Github',
+        'Instapage', 'Bitbucket', 'Heroku', 'Tumblr', 'Shopify',
+        'Campaign Monitor', 'Cargo Collective', 'Webflow', 'Helpjuice',
+        'HelpScout', 'Zendesk', 'Ghost', 'Uptimerobot', 'Pantheon',
+        'Gemfury', 'WordPress.com', 'Readme.io', 'Surge.sh', 'Tave',
+        'Statuspage', 'UserVoice', 'Netlify', 'SmartJobBoard', 'Intercom',
+        'Kinsta', 'LaunchRock', 'Maxcdn', 'Proposify', 'GetResponse',
+        'Tilda', 'Brightcove', 'Bigcartel',' Shortio', 'Anima',
+        'Microsoft Azure', 'Agile CRM', 'Airee.ru', 'Canny', 'Discourse',
+        'Digital Ocean', 'Strikingly'
+    }
 
     try:
         with open(output_file, 'r') as f:
@@ -461,6 +476,11 @@ def parse_subdominator_output(output_file):
                     if service_end > 0:
                         service = line[1:service_end]
                         line = line[service_end + 1:].strip()
+
+                # FILTER: Only include services that are ACTUALLY vulnerable
+                # Skip Fastly, Cloudfront, Akamai, etc. (not vulnerable per can-i-take-over-xyz)
+                if service not in VULNERABLE_SERVICES:
+                    continue
 
                 # Split subdomain and CNAME
                 subdomain = ''
