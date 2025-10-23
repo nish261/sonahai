@@ -444,73 +444,95 @@ def parse_subdominator_output(output_file):
     if not output_file or not Path(output_file).exists():
         return vulnerabilities
 
-    # Services that are ACTUALLY vulnerable according to can-i-take-over-xyz
-    # https://github.com/EdOverflow/can-i-take-over-xyz
-    # Mapping of Subdominator names -> standardized names
+    # OFFICIAL list from can-i-take-over-xyz (EdOverflow)
+    # Source: https://github.com/EdOverflow/can-i-take-over-xyz
+    # Last updated: 2024-10-24
+    # Mapping: Subdominator service name -> Display name
     VULNERABLE_SERVICES = {
-        # Cloud providers (DEFINITELY vulnerable)
-        'AWS/S3': 'AWS S3',
-        'AWS/Elastic Beanstalk': 'AWS Elastic Beanstalk',
+        # Cloud Providers
+        'AWS/S3': 'AWS/S3',
+        'AWS/Elastic Beanstalk': 'AWS/Elastic Beanstalk',
         'Microsoft Azure': 'Microsoft Azure',
-        'Digital Ocean': 'DigitalOcean',
+        'Digital Ocean': 'Digital Ocean',
 
-        # SaaS platforms (DEFINITELY vulnerable)
-        'Github': 'GitHub Pages',
-        'Heroku': 'Heroku',
-        'Shopify': 'Shopify',
-        'Tumblr': 'Tumblr',
+        # Development Platforms
         'Bitbucket': 'Bitbucket',
+        'Github': 'Github',  # Note: Subdominator may use "Github" not "GitHub"
+        'JetBrains': 'JetBrains',
+        'Ngrok': 'Ngrok',
         'Pantheon': 'Pantheon',
-        'Webflow': 'Webflow',
-        'Surge.sh': 'Surge.sh',
+        'Readthedocs': 'Readthedocs',
 
-        # Marketing/Landing pages (DEFINITELY vulnerable)
-        'Unbounce': 'Unbounce',
-        'Instapage': 'Instapage',
-        'Wix': 'Wix',
-        'LaunchRock': 'LaunchRock',
-        'Tilda': 'Tilda',
-
-        # Other services (DEFINITELY vulnerable)
-        'Cargo Collective': 'Cargo Collective',
-        'Statuspage': 'Statuspage',
-        'UserVoice': 'UserVoice',
-        'Zendesk': 'Zendesk',
-        'HelpScout': 'HelpScout',
-        'Helpjuice': 'Helpjuice',
+        # CMS/Blogging
         'Ghost': 'Ghost',
-        'WordPress.com': 'WordPress.com',
-        'Campaign Monitor': 'Campaign Monitor',
-        'GetResponse': 'GetResponse',
+        'HatenaBlog': 'HatenaBlog',
+        'Wordpress': 'Wordpress',
+        'Worksites': 'Worksites',
+
+        # Marketing/Landing Pages
+        'LaunchRock': 'LaunchRock',
+        'Smugsmug': 'Smugsmug',
+        'Strikingly': 'Strikingly',
+        'Surge.sh': 'Surge.sh',
+        'Uberflip': 'Uberflip',
+
+        # Support/Help Desk
+        'Cargo Collective': 'Cargo Collective',
+        'Help Juice': 'Help Juice',
+        'Help Scout': 'Help Scout',
+        'Helprace': 'Helprace',
+        'Pingdom': 'Pingdom',
         'Readme.io': 'Readme.io',
-        'Netlify': 'Netlify',
-        'Uptimerobot': 'Uptimerobot',
-        'SmartJobBoard': 'SmartJobBoard',
-        'Intercom': 'Intercom',
-        'Kinsta': 'Kinsta',
-        'Proposify': 'Proposify',
-        'Tave': 'Tave',
-        'Gemfury': 'Gemfury',
-        'Maxcdn': 'Maxcdn',
-        'Brightcove': 'Brightcove',
-        'Bigcartel': 'Bigcartel',
-        'Shortio': 'Shortio',
-        'Anima': 'Anima',
+
+        # Business/CRM
         'Agile CRM': 'Agile CRM',
-        'Airee.ru': 'Airee.ru',
+        'Campaign Monitor': 'Campaign Monitor',
         'Canny': 'Canny',
+        'Gemfury': 'Gemfury',
+        'Getresponse': 'Getresponse',
+        'SmartJobBoard': 'SmartJobBoard',
+        'SurveySparrow': 'SurveySparrow',
+        'Uptimerobot': 'Uptimerobot',
+
+        # Other Services
+        'Airee.ru': 'Airee.ru',
+        'Anima': 'Anima',
         'Discourse': 'Discourse',
-        'Strikingly': 'Strikingly'
+        'Short.io': 'Short.io',
     }
 
     # Services to EXCLUDE (NOT vulnerable according to can-i-take-over-xyz)
+    # Source: https://github.com/EdOverflow/can-i-take-over-xyz
+    # Last updated: 2024-10-24
     EXCLUDED_SERVICES = {
-        'Fastly',       # NOT vulnerable - requires private key
-        'CloudFront',   # NOT vulnerable - requires AWS account access
-        'Cloudflare',   # NOT vulnerable
-        'Akamai',       # NOT vulnerable
-        'Imperva',      # NOT vulnerable
-        'Sucuri',       # NOT vulnerable
+        'Acquia',                   # NOT vulnerable
+        'Akamai',                   # NOT vulnerable
+        'AWS/Load Balancer (ELB)',  # NOT vulnerable
+        'Cloudfront',               # NOT vulnerable - requires AWS account
+        'CloudFront',               # Alternate spelling
+        'Cloudflare',               # NOT vulnerable
+        'Desk',                     # NOT vulnerable
+        'Dreamhost',                # NOT vulnerable
+        'Fastly',                   # NOT vulnerable - requires private key
+        'Feedpress',                # NOT vulnerable
+        'Firebase',                 # NOT vulnerable
+        'Fly.io',                   # NOT vulnerable
+        'Freshdesk',                # NOT vulnerable
+        'Gitlab',                   # NOT vulnerable
+        'Google Cloud Storage',     # NOT vulnerable
+        'Google Sites',             # NOT vulnerable
+        'HubSpot',                  # NOT vulnerable
+        'Instapage',                # NOT vulnerable (was vulnerable, now fixed)
+        'Key CDN',                  # NOT vulnerable
+        'Kinsta',                   # NOT vulnerable
+        'Mailchimp',                # NOT vulnerable
+        'Sendgrid',                 # NOT vulnerable
+        'Squarespace',              # NOT vulnerable
+        'Statuspage',               # NOT vulnerable (was vulnerable, now fixed)
+        'Unbounce',                 # NOT vulnerable (was vulnerable, now fixed)
+        'UserVoice',                # NOT vulnerable (was vulnerable, now fixed)
+        'WP Engine',                # NOT vulnerable
+        'Zendesk',                  # NOT vulnerable (was vulnerable, now fixed)
     }
 
     try:
