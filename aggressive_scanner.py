@@ -446,17 +446,71 @@ def parse_subdominator_output(output_file):
 
     # Services that are ACTUALLY vulnerable according to can-i-take-over-xyz
     # https://github.com/EdOverflow/can-i-take-over-xyz
+    # Mapping of Subdominator names -> standardized names
     VULNERABLE_SERVICES = {
-        'AWS/S3', 'AWS/Elastic Beanstalk', 'Unbounce', 'Wix', 'Github',
-        'Instapage', 'Bitbucket', 'Heroku', 'Tumblr', 'Shopify',
-        'Campaign Monitor', 'Cargo Collective', 'Webflow', 'Helpjuice',
-        'HelpScout', 'Zendesk', 'Ghost', 'Uptimerobot', 'Pantheon',
-        'Gemfury', 'WordPress.com', 'Readme.io', 'Surge.sh', 'Tave',
-        'Statuspage', 'UserVoice', 'Netlify', 'SmartJobBoard', 'Intercom',
-        'Kinsta', 'LaunchRock', 'Maxcdn', 'Proposify', 'GetResponse',
-        'Tilda', 'Brightcove', 'Bigcartel',' Shortio', 'Anima',
-        'Microsoft Azure', 'Agile CRM', 'Airee.ru', 'Canny', 'Discourse',
-        'Digital Ocean', 'Strikingly'
+        # Cloud providers (DEFINITELY vulnerable)
+        'AWS/S3': 'AWS S3',
+        'AWS/Elastic Beanstalk': 'AWS Elastic Beanstalk',
+        'Microsoft Azure': 'Microsoft Azure',
+        'Digital Ocean': 'DigitalOcean',
+
+        # SaaS platforms (DEFINITELY vulnerable)
+        'Github': 'GitHub Pages',
+        'Heroku': 'Heroku',
+        'Shopify': 'Shopify',
+        'Tumblr': 'Tumblr',
+        'Bitbucket': 'Bitbucket',
+        'Pantheon': 'Pantheon',
+        'Webflow': 'Webflow',
+        'Surge.sh': 'Surge.sh',
+
+        # Marketing/Landing pages (DEFINITELY vulnerable)
+        'Unbounce': 'Unbounce',
+        'Instapage': 'Instapage',
+        'Wix': 'Wix',
+        'LaunchRock': 'LaunchRock',
+        'Tilda': 'Tilda',
+
+        # Other services (DEFINITELY vulnerable)
+        'Cargo Collective': 'Cargo Collective',
+        'Statuspage': 'Statuspage',
+        'UserVoice': 'UserVoice',
+        'Zendesk': 'Zendesk',
+        'HelpScout': 'HelpScout',
+        'Helpjuice': 'Helpjuice',
+        'Ghost': 'Ghost',
+        'WordPress.com': 'WordPress.com',
+        'Campaign Monitor': 'Campaign Monitor',
+        'GetResponse': 'GetResponse',
+        'Readme.io': 'Readme.io',
+        'Netlify': 'Netlify',
+        'Uptimerobot': 'Uptimerobot',
+        'SmartJobBoard': 'SmartJobBoard',
+        'Intercom': 'Intercom',
+        'Kinsta': 'Kinsta',
+        'Proposify': 'Proposify',
+        'Tave': 'Tave',
+        'Gemfury': 'Gemfury',
+        'Maxcdn': 'Maxcdn',
+        'Brightcove': 'Brightcove',
+        'Bigcartel': 'Bigcartel',
+        'Shortio': 'Shortio',
+        'Anima': 'Anima',
+        'Agile CRM': 'Agile CRM',
+        'Airee.ru': 'Airee.ru',
+        'Canny': 'Canny',
+        'Discourse': 'Discourse',
+        'Strikingly': 'Strikingly'
+    }
+
+    # Services to EXCLUDE (NOT vulnerable according to can-i-take-over-xyz)
+    EXCLUDED_SERVICES = {
+        'Fastly',       # NOT vulnerable - requires private key
+        'CloudFront',   # NOT vulnerable - requires AWS account access
+        'Cloudflare',   # NOT vulnerable
+        'Akamai',       # NOT vulnerable
+        'Imperva',      # NOT vulnerable
+        'Sucuri',       # NOT vulnerable
     }
 
     try:
@@ -477,10 +531,19 @@ def parse_subdominator_output(output_file):
                         service = line[1:service_end]
                         line = line[service_end + 1:].strip()
 
-                # FILTER: Only include services that are ACTUALLY vulnerable
-                # Skip Fastly, Cloudfront, Akamai, etc. (not vulnerable per can-i-take-over-xyz)
-                if service not in VULNERABLE_SERVICES:
+                # FILTER: Skip non-vulnerable services (Fastly, CloudFront, etc.)
+                if service in EXCLUDED_SERVICES:
                     continue
+
+                # Only include known vulnerable services
+                if service not in VULNERABLE_SERVICES:
+                    # Log unknown services for future additions
+                    with open(Path("unknown_services.txt"), 'a') as uf:
+                        uf.write(f"{service}\n")
+                    continue
+
+                # Map to standardized name
+                standardized_service = VULNERABLE_SERVICES[service]
 
                 # Split subdomain and CNAME
                 subdomain = ''
@@ -502,7 +565,7 @@ def parse_subdominator_output(output_file):
                 if subdomain:
                     vuln = {
                         'subdomain': subdomain,
-                        'service': service,
+                        'service': standardized_service,  # Use standardized name
                         'cname': cname,
                         'status': '⚠️ DANGLING - HIGH PRIORITY!',  # Subdominator already validates
                         'difficulty': 'Easy'
