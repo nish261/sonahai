@@ -16,7 +16,8 @@ import credentials_manager as creds_mgr
 st.set_page_config(
     page_title="Subdomain Takeover Scanner",
     page_icon="🔍",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"  # Start with sidebar collapsed to save space
 )
 
 # Organized output folders
@@ -46,72 +47,62 @@ NICHE_STATUS = Path("niche_status.txt")
 PIPELINE_PROGRESS = Path("pipeline_progress.txt")
 PIPELINE_STATUS = Path("pipeline_status.txt")
 
-# Header
-st.title("🔍 Subdomain Takeover Scanner")
-st.markdown("**Bug Bounty Tool** - Find dangling DNS and unclaimed resources")
-st.markdown("**Updated:** Oct 24, 2024 | **Source:** [can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz)")
+# Compact Header
+col_h1, col_h2 = st.columns([2, 1])
+with col_h1:
+    st.title("🔍 Subdomain Takeover Scanner")
+    st.caption("Bug Bounty Tool | [can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz) (Oct 2024)")
 
-# Show current scan status if running
+# Show current scan status if running (compact version)
 if Path("scan_progress.txt").exists():
     try:
         progress = int(open("scan_progress.txt").read().strip())
         if progress < 100:
-            with st.container():
-                st.info(f"🚀 **Scanner Running:** {progress}% complete")
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.progress(progress / 100)
-                with col2:
-                    if st.button("View Status"):
-                        if Path("scan_status.txt").exists():
-                            status = open("scan_status.txt").read().split('\n')[-10:]
-                            st.code('\n'.join(status))
+            with col_h2:
+                st.metric("Scan Progress", f"{progress}%", delta="Running")
+            st.progress(progress / 100, text=f"🚀 Scanner running: {progress}% complete")
     except:
         pass
 
-# Quick Start Menu
+# Quick Start Menu - Compact with Columns
 with st.expander("📖 Quick Start Guide", expanded=False):
-    st.markdown("""
-    ### 🎯 What This Scanner Does
+    col1, col2, col3 = st.columns(3)
 
-    Scans domains for **subdomain takeover vulnerabilities** using the official
-    [can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz) vulnerability list.
+    with col1:
+        st.markdown("""
+        **🎯 What It Does**
+        Scans for subdomain takeover vulnerabilities using [can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz)
 
-    ### ✅ Detects 43 Vulnerable Services
+        **✅ Detects (43 services)**
+        - Cloud: AWS, Azure, Digital Ocean
+        - Dev: GitHub, Bitbucket, Ngrok
+        - CMS: Ghost, Wordpress
+        - And 34 more...
+        """)
 
-    - **Cloud:** AWS S3, AWS Elastic Beanstalk, Microsoft Azure, Digital Ocean
-    - **Dev Platforms:** GitHub, Bitbucket, JetBrains, Ngrok, Pantheon
-    - **CMS:** Ghost, Wordpress, HatenaBlog
-    - **Marketing:** LaunchRock, Smugsmug, Strikingly, Surge.sh
-    - **And 29 more...**
+    with col2:
+        st.markdown("""
+        **🚀 How to Use**
+        1. Configure in sidebar →
+        2. Click "Start Scan"
+        3. Monitor progress
+        4. View results on Desktop
 
-    ### ❌ Automatically Filters False Positives
+        **📁 Results**
+        `~/Desktop/Subdomain_Takeover_Results/`
+        """)
 
-    - CDNs: Fastly, CloudFront, Cloudflare (not vulnerable)
-    - Fixed services: Unbounce, Instapage, Statuspage (vendors fixed)
-    - And 20+ others
+    with col3:
+        st.markdown("""
+        **💡 Pro Tips**
+        - Ranks 5000-15000 = more vulns
+        - 45-90 min for 1000 domains
+        - Use CSV for filtering
 
-    ### 🚀 How to Use
-
-    1. **Configure scan** in sidebar (domain ranks, workers)
-    2. **Click "Start Scan"** button below
-    3. **Monitor progress** in real-time
-    4. **View results** on Desktop when complete
-
-    ### 📁 Results Location
-
-    ```
-    ~/Desktop/Subdomain_Takeover_Results/Scans/
-    ├── subdomain_takeover_detailed.csv
-    └── subdomain_takeover_results.txt
-    ```
-
-    ### 💡 Pro Tips
-
-    - Lower-ranked domains (5000-15000) have MORE vulnerabilities
-    - Run overnight for best results (45-90 min for 1000 domains)
-    - Check CSV file for easy sorting and filtering
-    """)
+        **❌ Auto-Filters**
+        - CDNs (Fastly, CloudFront)
+        - Fixed services (28 total)
+        """)
 
 # Check scanner engine status
 import subprocess as sp
