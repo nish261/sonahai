@@ -49,6 +49,69 @@ PIPELINE_STATUS = Path("pipeline_status.txt")
 # Header
 st.title("🔍 Subdomain Takeover Scanner")
 st.markdown("**Bug Bounty Tool** - Find dangling DNS and unclaimed resources")
+st.markdown("**Updated:** Oct 24, 2024 | **Source:** [can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz)")
+
+# Show current scan status if running
+if Path("scan_progress.txt").exists():
+    try:
+        progress = int(open("scan_progress.txt").read().strip())
+        if progress < 100:
+            with st.container():
+                st.info(f"🚀 **Scanner Running:** {progress}% complete")
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.progress(progress / 100)
+                with col2:
+                    if st.button("View Status"):
+                        if Path("scan_status.txt").exists():
+                            status = open("scan_status.txt").read().split('\n')[-10:]
+                            st.code('\n'.join(status))
+    except:
+        pass
+
+# Quick Start Menu
+with st.expander("📖 Quick Start Guide", expanded=False):
+    st.markdown("""
+    ### 🎯 What This Scanner Does
+
+    Scans domains for **subdomain takeover vulnerabilities** using the official
+    [can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz) vulnerability list.
+
+    ### ✅ Detects 43 Vulnerable Services
+
+    - **Cloud:** AWS S3, AWS Elastic Beanstalk, Microsoft Azure, Digital Ocean
+    - **Dev Platforms:** GitHub, Bitbucket, JetBrains, Ngrok, Pantheon
+    - **CMS:** Ghost, Wordpress, HatenaBlog
+    - **Marketing:** LaunchRock, Smugsmug, Strikingly, Surge.sh
+    - **And 29 more...**
+
+    ### ❌ Automatically Filters False Positives
+
+    - CDNs: Fastly, CloudFront, Cloudflare (not vulnerable)
+    - Fixed services: Unbounce, Instapage, Statuspage (vendors fixed)
+    - And 20+ others
+
+    ### 🚀 How to Use
+
+    1. **Configure scan** in sidebar (domain ranks, workers)
+    2. **Click "Start Scan"** button below
+    3. **Monitor progress** in real-time
+    4. **View results** on Desktop when complete
+
+    ### 📁 Results Location
+
+    ```
+    ~/Desktop/Subdomain_Takeover_Results/Scans/
+    ├── subdomain_takeover_detailed.csv
+    └── subdomain_takeover_results.txt
+    ```
+
+    ### 💡 Pro Tips
+
+    - Lower-ranked domains (5000-15000) have MORE vulnerabilities
+    - Run overnight for best results (45-90 min for 1000 domains)
+    - Check CSV file for easy sorting and filtering
+    """)
 
 # Check scanner engine status
 import subprocess as sp
