@@ -441,6 +441,72 @@ with st.sidebar.expander("Scan Settings", expanded=True):
         **Extensions:** All
         """)
 
+# Service Filter
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎯 Service Filter")
+with st.sidebar.expander("Select Services to Scan", expanded=False):
+    st.markdown("**Choose which services to look for:**")
+
+    # Organize by category
+    st.markdown("### ☁️ Cloud Platforms")
+    aws_services = st.checkbox("AWS (S3, Elastic Beanstalk)", value=True, key="aws")
+    azure_services = st.checkbox("Microsoft Azure (All services)", value=True, key="azure")
+    do_services = st.checkbox("Digital Ocean", value=True, key="do")
+
+    st.markdown("### 💻 Development & Hosting")
+    github_services = st.checkbox("GitHub Pages", value=True, key="github")
+    heroku_services = st.checkbox("Heroku", value=True, key="heroku")
+    netlify_services = st.checkbox("Netlify", value=True, key="netlify")
+    vercel_services = st.checkbox("Vercel", value=True, key="vercel")
+
+    st.markdown("### 🛒 E-commerce & CMS")
+    shopify_services = st.checkbox("Shopify", value=True, key="shopify")
+    wordpress_services = st.checkbox("WordPress", value=True, key="wordpress")
+    webflow_services = st.checkbox("Webflow", value=True, key="webflow")
+    ghost_services = st.checkbox("Ghost", value=True, key="ghost")
+
+    st.markdown("### 📱 Other Services")
+    other_services = st.checkbox("All Other Services (43 total)", value=True, key="other")
+
+    # Build service filter string
+    selected_services = []
+    if aws_services:
+        selected_services.extend(["AWS/S3", "AWS/Elastic Beanstalk"])
+    if azure_services:
+        selected_services.append("Azure")
+    if do_services:
+        selected_services.append("Digital Ocean")
+    if github_services:
+        selected_services.append("Github")
+    if heroku_services:
+        selected_services.append("Heroku")
+    if netlify_services:
+        selected_services.append("Netlify")
+    if vercel_services:
+        selected_services.append("Vercel")
+    if shopify_services:
+        selected_services.append("Shopify")
+    if wordpress_services:
+        selected_services.append("WordPress.com")
+    if webflow_services:
+        selected_services.append("Webflow")
+    if ghost_services:
+        selected_services.append("Ghost")
+
+    # Store in session state
+    if 'service_filter' not in st.session_state:
+        st.session_state.service_filter = "ALL"
+
+    if len(selected_services) == 0:
+        st.warning("⚠️ No services selected! Scanner will find nothing.")
+        st.session_state.service_filter = "NONE"
+    elif not other_services and len(selected_services) > 0:
+        st.session_state.service_filter = ",".join(selected_services)
+        st.info(f"✅ Scanning {len(selected_services)} specific services only")
+    else:
+        st.session_state.service_filter = "ALL"
+        st.success(f"✅ Scanning all 43 vulnerable services")
+
 with st.sidebar.expander("⚡ Performance Settings", expanded=False):
     enum_workers = st.number_input(
         "Enumeration Workers",
@@ -581,10 +647,11 @@ with col_btn1:
 
         # Create runner script
         extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
+        service_filter_str = st.session_state.get('service_filter', 'ALL')
         runner_script = Path("run_complete_bg.sh")
         runner_script.write_text(f"""#!/bin/bash
 source venv/bin/activate
-python complete_pipeline.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers}
+python complete_pipeline.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers} "{service_filter_str}"
 """)
         runner_script.chmod(0o755)
 
@@ -603,10 +670,11 @@ with col_btn2:
 
         # Create runner script
         extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
+        service_filter_str = st.session_state.get('service_filter', 'ALL')
         runner_script = Path("run_scan_bg.sh")
         runner_script.write_text(f"""#!/bin/bash
 source venv/bin/activate
-python aggressive_scanner.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers}
+python aggressive_scanner.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers} "{service_filter_str}"
 """)
         runner_script.chmod(0o755)
 

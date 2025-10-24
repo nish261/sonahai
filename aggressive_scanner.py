@@ -437,8 +437,13 @@ def run_subdominator(subdomains_file, output_file):
     except Exception as e:
         return None, f"Subdominator error: {str(e)}"
 
-def parse_subdominator_output(output_file):
-    """Parse Subdominator output into our format."""
+def parse_subdominator_output(output_file, service_filter=None):
+    """Parse Subdominator output into our format.
+
+    Args:
+        output_file: Path to Subdominator output file
+        service_filter: List of services to include (None = all services)
+    """
     vulnerabilities = []
 
     if not output_file or not Path(output_file).exists():
@@ -567,6 +572,17 @@ def parse_subdominator_output(output_file):
                 # Map to standardized name
                 standardized_service = VULNERABLE_SERVICES[service]
 
+                # Apply service filter if specified
+                if service_filter is not None and len(service_filter) > 0:
+                    # Check if this service matches any in the filter
+                    service_matches = False
+                    for filter_service in service_filter:
+                        if filter_service.lower() in standardized_service.lower():
+                            service_matches = True
+                            break
+                    if not service_matches:
+                        continue
+
                 # Split subdomain and CNAME
                 subdomain = ''
                 cname = ''
@@ -601,7 +617,7 @@ def parse_subdominator_output(output_file):
 def main():
     """Main scanner."""
     if len(sys.argv) < 3:
-        print("Usage: aggressive_scanner.py <start_rank> <num_domains> [extensions] [enum_workers] [scan_workers]")
+        print("Usage: aggressive_scanner.py <start_rank> <num_domains> [extensions] [enum_workers] [scan_workers] [service_filter]")
         sys.exit(1)
 
     start_rank = int(sys.argv[1])
@@ -609,6 +625,13 @@ def main():
     target_extensions = sys.argv[3] if len(sys.argv) > 3 else 'ALL'
     enum_workers = int(sys.argv[4]) if len(sys.argv) > 4 else 10
     scan_workers = int(sys.argv[5]) if len(sys.argv) > 5 else 30
+    service_filter = sys.argv[6] if len(sys.argv) > 6 else 'ALL'
+
+    # Parse service filter
+    if service_filter == 'ALL' or service_filter == 'NONE':
+        filtered_services = None if service_filter == 'ALL' else []
+    else:
+        filtered_services = [s.strip() for s in service_filter.split(',')]
 
     try:
         # Clean old files
@@ -707,7 +730,7 @@ def main():
                 update_status("Parsing results...", "Phase 3: Scanning", "✓ Subdominator scan complete")
                 update_progress(90)
 
-                vulnerabilities = parse_subdominator_output(result_file)
+                vulnerabilities = parse_subdominator_output(result_file, filtered_services)
 
                 update_status(
                     f"Found {len(vulnerabilities)} vulns",
