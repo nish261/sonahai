@@ -1109,17 +1109,26 @@ if NICHE_CSV.exists():
                 st.write(f"**Parent Domain:** {row['parent_domain']}")
 
             with col2:
-                st.write(f"**Affiliate Products:** {row['affiliate_products']}")
-                st.write(f"**Potential Value:** {row['affiliate_value']}")
-                st.write(f"**Domain Authority:** {row['domain_authority']}")
+                if 'affiliate_products' in row:
+                    st.write(f"**Affiliate Products:** {row['affiliate_products']}")
+                if 'affiliate_value' in row:
+                    st.write(f"**Potential Value:** {row['affiliate_value']}")
+                if 'cpa_value' in row:
+                    st.write(f"**CPA Value:** {row['cpa_value']}")
+                if 'domain_authority' in row:
+                    st.write(f"**Domain Authority:** {row['domain_authority']}")
                 if 'actual_da' in row and row['actual_da'] > 0:
                     st.write(f"**Actual DA:** {int(row['actual_da'])}/100")
+                if 'total_backlinks' in row and row['total_backlinks'] > 0:
                     st.write(f"**Total Backlinks:** {int(row['total_backlinks']):,}")
+                if 'linking_domains' in row and row['linking_domains'] > 0:
                     st.write(f"**Linking Domains:** {int(row['linking_domains']):,}")
-                    if 'spam_score' in row:
-                        st.write(f"**Spam Score:** {int(row['spam_score'])}/100")
+                if 'spam_score' in row:
+                    st.write(f"**Spam Score:** {int(row['spam_score'])}/100")
+                if 'dr_source' in row:
                     st.write(f"**DR Source:** {row['dr_source']}")
-                st.write(f"**Historical Content:** {row['historical_content']}")
+                if 'historical_content' in row:
+                    st.write(f"**Historical Content:** {row['historical_content']}")
 
     st.success(f"""
     ✅ **Niche analysis complete!**
