@@ -933,16 +933,6 @@ if VERIFIED_FILE.exists():
     These are high-confidence subdomain takeover vulnerabilities!
     """)
 
-    # Niche Analysis Section
-    st.markdown("---")
-    st.subheader("💰 Affiliate Niche Analysis")
-    st.info("""
-    **Understand what affiliate marketers look for:**
-
-    This analysis identifies what niche each subdomain belongs to and estimates its value
-    for affiliate marketing. This helps you understand why certain subdomains are targeted.
-    """)
-
     niche_running = NICHE_PROGRESS.exists()
 
     col_niche1, col_niche2 = st.columns([1, 1])
