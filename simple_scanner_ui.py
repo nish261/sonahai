@@ -709,11 +709,13 @@ if OUTPUT_FILE.exists():
                 on='subdomain',
                 how='left'
             )
-            # Convert trust_score to 1-9 scale for display
+            # Convert trust_score to 1-10 scale for display
             def trust_to_rating(trust):
                 if pd.isna(trust):
                     return '—'
-                if trust >= 80:
+                if trust >= 90:
+                    return 10
+                elif trust >= 80:
                     return 9
                 elif trust >= 70:
                     return 8
@@ -743,14 +745,14 @@ if OUTPUT_FILE.exists():
         if niche_df is not None:
             rating_filter = st.selectbox(
                 "Filter by Rating",
-                ["All Ratings", "🔥 High (7-9)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
+                ["All Ratings", "🔥 High (7-10)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
                 key="rating_filter"
             )
 
             # Apply filter
             display_df = results_df.copy()
-            if rating_filter == "🔥 High (7-9)":
-                display_df = display_df[display_df['rating'].isin([7, 8, 9])]
+            if rating_filter == "🔥 High (7-10)":
+                display_df = display_df[display_df['rating'].isin([7, 8, 9, 10])]
             elif rating_filter == "⚡ Medium (4-6)":
                 display_df = display_df[display_df['rating'].isin([4, 5, 6])]
             elif rating_filter == "⚠️ Low (1-3)":
