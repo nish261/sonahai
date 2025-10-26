@@ -736,21 +736,19 @@ if OUTPUT_FILE.exists():
         else:
             results_df['rating'] = '—'
 
-        # Add rating filter
-        col_filter1, col_filter2 = st.columns([3, 1])
-        with col_filter1:
-            st.markdown("### 📊 Vulnerability Results with SEO Ratings")
-        with col_filter2:
-            if niche_df is not None:
-                rating_filter = st.selectbox(
-                    "Filter by Rating",
-                    ["All Ratings", "🔥 High (7-9)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
-                    key="rating_filter"
-                )
+        # Single unified table with all info
+        st.markdown("### 📊 All Results")
 
-        # Apply filter
-        display_df = results_df.copy()
-        if niche_df is not None and col_filter2:
+        # Add rating filter
+        if niche_df is not None:
+            rating_filter = st.selectbox(
+                "Filter by Rating",
+                ["All Ratings", "🔥 High (7-9)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
+                key="rating_filter"
+            )
+
+            # Apply filter
+            display_df = results_df.copy()
             if rating_filter == "🔥 High (7-9)":
                 display_df = display_df[display_df['rating'].isin([7, 8, 9])]
             elif rating_filter == "⚡ Medium (4-6)":
@@ -759,14 +757,15 @@ if OUTPUT_FILE.exists():
                 display_df = display_df[display_df['rating'].isin([1, 2, 3])]
             elif rating_filter == "❓ Not Rated":
                 display_df = display_df[display_df['rating'] == '—']
+        else:
+            display_df = results_df.copy()
 
-        # Show compact table
+        # Show everything in one table
         if len(display_df) > 0:
             st.dataframe(
-                display_df[['rating', 'subdomain', 'service', 'cname', 'status'] +
-                          (['cpa_vertical', 'seo_value'] if niche_df is not None else [])],
+                display_df,
                 use_container_width=True,
-                height=400
+                height=600
             )
             st.caption(f"Showing {len(display_df)} of {len(results_df)} total results")
         else:
@@ -964,183 +963,18 @@ python niche_analyzer.py
                     for line in niche_lines:
                         st.text(line.strip())
 
-# Display niche analysis results
+# Niche analysis complete - ratings already merged into main table above
 if NICHE_CSV.exists():
-    st.markdown("---")
-    st.subheader("💰 Niche Analysis Results")
+    # Ratings already shown in main table above - just show download
+    st.info(f"✅ SEO ratings complete - all data merged into main results table above")
 
-    # Load and display the CSV
-    import pandas as pd
-    df = pd.read_csv(NICHE_CSV)
-
-    # Show summary stats
-    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-
-    with col_stat1:
-        high_trust = len(df[df['trust_score'] >= 80]) if 'trust_score' in df.columns else 0
-        st.metric("High Trust (80+)", high_trust)
-
-    with col_stat2:
-        high_value = len(df[df['seo_value'].isin(['High', 'Very High'])])
-        st.metric("High SEO Value", high_value)
-
-    with col_stat3:
-        avg_da = df['actual_da'].mean() if 'actual_da' in df.columns and df['actual_da'].any() else 0
-        st.metric("Avg DA", f"{avg_da:.0f}/100" if avg_da > 0 else "N/A")
-
-    with col_stat4:
-        niche_col = 'cpa_vertical' if 'cpa_vertical' in df.columns else 'niche'
-        top_niche = df[niche_col].value_counts().index[0] if len(df) > 0 and niche_col in df.columns else "N/A"
-        st.metric("Top Niche", top_niche)
-
-    # Show the data table
-    st.markdown("### 📊 Detailed Niche Breakdown")
-    st.dataframe(df, use_container_width=True, height=400)
-
-    # Download buttons
-    col_dl1, col_dl2, col_dl3 = st.columns(3)
-
-    with col_dl1:
-        with open(NICHE_CSV, 'rb') as f:
-            st.download_button(
-                label="📥 Full Analysis CSV",
-                data=f,
-                file_name=NICHE_CSV.name,
-                mime="text/csv",
-                use_container_width=True
-            )
-
-    with col_dl2:
-        # Check for top priority targets file
-        top_priority_file = NICHE_FOLDER / "top_priority_targets.csv"
-        if top_priority_file.exists():
-            with open(top_priority_file, 'rb') as f:
-                st.download_button(
-                    label="🎯 Top Priority (Trust 60+)",
-                    data=f,
-                    file_name="top_priority_targets.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-        else:
-            # Create filtered high-trust CSV on the fly
-            high_trust_df = df[df['trust_score'] >= 60] if 'trust_score' in df.columns else df[df['seo_value'].isin(['High', 'Very High'])]
-            if len(high_trust_df) > 0:
-                high_trust_csv = high_trust_df.to_csv(index=False)
-                st.download_button(
-                    label="🎯 Top Priority (Trust 60+)",
-                    data=high_trust_csv,
-                    file_name="top_priority_targets.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
-    with col_dl3:
-        # Create filtered high-value CSV
-        high_value_df = df[df['seo_value'].isin(['High', 'Very High'])]
-        if len(high_value_df) > 0:
-            high_value_csv = high_value_df.to_csv(index=False)
-            st.download_button(
-                label="💰 High SEO Value Only",
-                data=high_value_csv,
-                file_name="high_seo_value.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-
-    # Show insights
-    st.markdown("### 💡 Key Insights")
-
-    # Group by niche
-    niche_col = 'cpa_vertical' if 'cpa_vertical' in df.columns else 'niche'
-    if niche_col in df.columns:
-        niche_counts = df[niche_col].value_counts()
-    else:
-        niche_counts = pd.Series(dtype=int)
-
-    col_insight1, col_insight2 = st.columns(2)
-
-    with col_insight1:
-        st.markdown("**Niche Distribution:**")
-        if len(niche_counts) > 0:
-            for niche, count in niche_counts.head(5).items():
-                st.write(f"• {niche}: {count} subdomains")
-        else:
-            st.write("No niche data available")
-
-    with col_insight2:
-        st.markdown("**SEO Value Distribution:**")
-        seo_counts = df['seo_value'].value_counts()
-        for seo, count in seo_counts.items():
-            st.write(f"• {seo}: {count} subdomains")
-
-    # Top opportunities - sort by trust score if available
-    st.markdown("### 🎯 Top Priority Targets")
-
-    # Sort by trust score (if available) or SEO value
-    if 'trust_score' in df.columns:
-        top_opps = df.sort_values(by=['trust_score', 'actual_da'], ascending=[False, False]).head(10)
-        sort_label = "Trust Score"
-    else:
-        top_opps = df.sort_values(by=['seo_value', 'niche_confidence'], ascending=[False, False]).head(10)
-        sort_label = "SEO Value"
-
-    for idx, row in top_opps.iterrows():
-        # Create header with trust score badge
-        trust_badge = f"[Trust: {int(row['trust_score'])}/100] " if 'trust_score' in row and row['trust_score'] > 0 else ""
-        rank_badge = f"#{int(row['priority_rank'])} " if 'priority_rank' in row and row['priority_rank'] > 0 else ""
-
-        niche_display = row.get('cpa_vertical', row.get('niche', 'Unknown'))
-        with st.expander(f"{rank_badge}{trust_badge}{row['subdomain']} - {niche_display} ({row['seo_value']} SEO value)"):
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if 'priority_rank' in row and row['priority_rank'] > 0:
-                    st.write(f"**Priority Rank:** #{int(row['priority_rank'])}")
-                if 'trust_score' in row and row['trust_score'] > 0:
-                    st.write(f"**Trust Score:** {int(row['trust_score'])}/100")
-                niche_val = row.get('cpa_vertical', row.get('niche', 'Unknown'))
-                st.write(f"**Niche:** {niche_val}")
-                if 'niche_confidence' in row:
-                    st.write(f"**Confidence:** {row['niche_confidence']}")
-                elif 'vertical_confidence' in row:
-                    st.write(f"**Confidence:** {row['vertical_confidence']}")
-                st.write(f"**Service:** {row['service']}")
-                st.write(f"**Parent Domain:** {row['parent_domain']}")
-
-            with col2:
-                if 'affiliate_products' in row:
-                    st.write(f"**Affiliate Products:** {row['affiliate_products']}")
-                if 'affiliate_value' in row:
-                    st.write(f"**Potential Value:** {row['affiliate_value']}")
-                if 'cpa_value' in row:
-                    st.write(f"**CPA Value:** {row['cpa_value']}")
-                if 'domain_authority' in row:
-                    st.write(f"**Domain Authority:** {row['domain_authority']}")
-                if 'actual_da' in row and row['actual_da'] > 0:
-                    st.write(f"**Actual DA:** {int(row['actual_da'])}/100")
-                if 'total_backlinks' in row and row['total_backlinks'] > 0:
-                    st.write(f"**Total Backlinks:** {int(row['total_backlinks']):,}")
-                if 'linking_domains' in row and row['linking_domains'] > 0:
-                    st.write(f"**Linking Domains:** {int(row['linking_domains']):,}")
-                if 'spam_score' in row:
-                    st.write(f"**Spam Score:** {int(row['spam_score'])}/100")
-                if 'dr_source' in row:
-                    st.write(f"**DR Source:** {row['dr_source']}")
-                if 'historical_content' in row:
-                    st.write(f"**Historical Content:** {row['historical_content']}")
-
-    st.success(f"""
-    ✅ **Niche analysis complete!**
-    - Analyzed {len(df)} subdomains
-    - Found {high_value} high-value targets
-    - Results saved to: `{NICHE_CSV.name}`
-
-    **Use this data to understand:**
-    - What niches affiliate marketers target
-    - Which subdomains have highest SEO value
-    - What products they would promote
-    """)
+    with open(NICHE_CSV, 'rb') as f:
+        st.download_button(
+            label="📥 Download Full Niche Analysis CSV",
+            data=f,
+            file_name=NICHE_CSV.name,
+            mime="text/csv"
+        )
 
 # Bulk PoC Generation
 if st.session_state.get('bulk_generate'):
