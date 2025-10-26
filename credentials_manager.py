@@ -52,6 +52,31 @@ def save_credentials(creds):
     CREDS_FILE.write_bytes(encrypted)
     CREDS_FILE.chmod(0o600)  # Read/write for owner only
 
+def get_proxy_env():
+    """Get proxy environment variables from credentials"""
+    creds = load_credentials()
+    if not creds or not creds.get('proxy', {}).get('enabled', False):
+        return {}
+
+    proxy_config = creds['proxy']
+    env_vars = {}
+
+    # Build proxy URLs with auth if needed
+    for proto in ['http', 'https']:
+        proxy_url = proxy_config.get(proto, '')
+        if proxy_url:
+            # Add auth if provided
+            if proxy_config.get('username') and proxy_config.get('password'):
+                # Parse URL and inject auth
+                if '://' in proxy_url:
+                    protocol, rest = proxy_url.split('://', 1)
+                    proxy_url = f"{protocol}://{proxy_config['username']}:{proxy_config['password']}@{rest}"
+
+            env_vars[f'{proto.upper()}_PROXY'] = proxy_url
+            env_vars[f'{proto}_proxy'] = proxy_url  # lowercase for compatibility
+
+    return env_vars
+
 def load_credentials():
     """Load and decrypt credentials"""
     return decrypt_data()
@@ -69,6 +94,13 @@ def get_default_creds():
         'profile': {
             'researcher_name': '',
             'researcher_email': '',
+        },
+        'proxy': {
+            'enabled': False,
+            'http': '',
+            'https': '',
+            'username': '',
+            'password': '',
         },
         'aws': {
             'access_key_id': '',

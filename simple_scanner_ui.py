@@ -114,6 +114,42 @@ with st.sidebar.expander("Credential Manager", expanded=False):
     )
 
     st.markdown("---")
+    st.markdown("### 🌐 Proxy Settings")
+    st.caption("Use proxy to avoid rate limiting during scans")
+
+    if 'proxy' not in st.session_state.creds:
+        st.session_state.creds['proxy'] = {}
+
+    st.session_state.creds['proxy']['enabled'] = st.checkbox(
+        "Enable Proxy",
+        value=st.session_state.creds['proxy'].get('enabled', False)
+    )
+
+    st.session_state.creds['proxy']['http'] = st.text_input(
+        "HTTP Proxy (optional)",
+        value=st.session_state.creds['proxy'].get('http', ''),
+        placeholder="http://proxy.example.com:8080",
+        disabled=not st.session_state.creds['proxy'].get('enabled', False)
+    )
+    st.session_state.creds['proxy']['https'] = st.text_input(
+        "HTTPS Proxy (optional)",
+        value=st.session_state.creds['proxy'].get('https', ''),
+        placeholder="http://proxy.example.com:8080",
+        disabled=not st.session_state.creds['proxy'].get('enabled', False)
+    )
+    st.session_state.creds['proxy']['username'] = st.text_input(
+        "Proxy Username (if auth required)",
+        value=st.session_state.creds['proxy'].get('username', ''),
+        disabled=not st.session_state.creds['proxy'].get('enabled', False)
+    )
+    st.session_state.creds['proxy']['password'] = st.text_input(
+        "Proxy Password (if auth required)",
+        value=st.session_state.creds['proxy'].get('password', ''),
+        type="password",
+        disabled=not st.session_state.creds['proxy'].get('enabled', False)
+    )
+
+    st.markdown("---")
     st.markdown("### 🪣 AWS")
     st.session_state.creds['aws']['access_key_id'] = st.text_input(
         "Access Key ID",
@@ -613,12 +649,18 @@ with col_btn1:
             if f.exists():
                 f.unlink()
 
-        # Create runner script
+        # Create runner script with proxy support
         extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
         service_filter_str = st.session_state.get('service_filter', 'ALL')
+
+        # Get proxy environment variables
+        proxy_env = creds_mgr.get_proxy_env()
+        proxy_exports = '\n'.join([f'export {k}="{v}"' for k, v in proxy_env.items()]) if proxy_env else ''
+
         runner_script = Path("run_complete_bg.sh")
         runner_script.write_text(f"""#!/bin/bash
 source venv/bin/activate
+{proxy_exports}
 python complete_pipeline.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers} "{service_filter_str}"
 """)
         runner_script.chmod(0o755)
@@ -636,12 +678,18 @@ with col_btn2:
             if f.exists():
                 f.unlink()
 
-        # Create runner script
+        # Create runner script with proxy support
         extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
         service_filter_str = st.session_state.get('service_filter', 'ALL')
+
+        # Get proxy environment variables
+        proxy_env = creds_mgr.get_proxy_env()
+        proxy_exports = '\n'.join([f'export {k}="{v}"' for k, v in proxy_env.items()]) if proxy_env else ''
+
         runner_script = Path("run_scan_bg.sh")
         runner_script.write_text(f"""#!/bin/bash
 source venv/bin/activate
+{proxy_exports}
 python aggressive_scanner.py {start_rank} {num_domains} "{extensions_str}" {enum_workers} {scan_workers} "{service_filter_str}"
 """)
         runner_script.chmod(0o755)
