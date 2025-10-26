@@ -742,8 +742,29 @@ if OUTPUT_FILE.exists():
                 how='left'
             )
             # Convert trust_score to 1-9 scale for display
-            results_df['rating'] = ((results_df['trust_score'] / 100) * 8 + 1).round(0).fillna(0).astype(int)
-            results_df['rating'] = results_df['rating'].replace(0, '—')
+            def trust_to_rating(trust):
+                if pd.isna(trust):
+                    return '—'
+                if trust >= 80:
+                    return 9
+                elif trust >= 70:
+                    return 8
+                elif trust >= 60:
+                    return 7
+                elif trust >= 50:
+                    return 6
+                elif trust >= 40:
+                    return 5
+                elif trust >= 30:
+                    return 4
+                elif trust >= 20:
+                    return 3
+                elif trust >= 10:
+                    return 2
+                else:
+                    return 1
+
+            results_df['rating'] = results_df['trust_score'].apply(trust_to_rating)
         else:
             results_df['rating'] = '—'
 
