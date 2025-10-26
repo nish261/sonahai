@@ -989,7 +989,8 @@ if NICHE_CSV.exists():
         st.metric("Avg DA", f"{avg_da:.0f}/100" if avg_da > 0 else "N/A")
 
     with col_stat4:
-        top_niche = df['niche'].value_counts().index[0] if len(df) > 0 else "N/A"
+        niche_col = 'cpa_vertical' if 'cpa_vertical' in df.columns else 'niche'
+        top_niche = df[niche_col].value_counts().index[0] if len(df) > 0 and niche_col in df.columns else "N/A"
         st.metric("Top Niche", top_niche)
 
     # Show the data table
@@ -1051,14 +1052,21 @@ if NICHE_CSV.exists():
     st.markdown("### 💡 Key Insights")
 
     # Group by niche
-    niche_counts = df['niche'].value_counts()
+    niche_col = 'cpa_vertical' if 'cpa_vertical' in df.columns else 'niche'
+    if niche_col in df.columns:
+        niche_counts = df[niche_col].value_counts()
+    else:
+        niche_counts = pd.Series(dtype=int)
 
     col_insight1, col_insight2 = st.columns(2)
 
     with col_insight1:
         st.markdown("**Niche Distribution:**")
-        for niche, count in niche_counts.head(5).items():
-            st.write(f"• {niche}: {count} subdomains")
+        if len(niche_counts) > 0:
+            for niche, count in niche_counts.head(5).items():
+                st.write(f"• {niche}: {count} subdomains")
+        else:
+            st.write("No niche data available")
 
     with col_insight2:
         st.markdown("**SEO Value Distribution:**")
@@ -1082,7 +1090,8 @@ if NICHE_CSV.exists():
         trust_badge = f"[Trust: {int(row['trust_score'])}/100] " if 'trust_score' in row and row['trust_score'] > 0 else ""
         rank_badge = f"#{int(row['priority_rank'])} " if 'priority_rank' in row and row['priority_rank'] > 0 else ""
 
-        with st.expander(f"{rank_badge}{trust_badge}{row['subdomain']} - {row['niche']} ({row['seo_value']} SEO value)"):
+        niche_display = row.get('cpa_vertical', row.get('niche', 'Unknown'))
+        with st.expander(f"{rank_badge}{trust_badge}{row['subdomain']} - {niche_display} ({row['seo_value']} SEO value)"):
             col1, col2 = st.columns(2)
 
             with col1:
@@ -1090,8 +1099,12 @@ if NICHE_CSV.exists():
                     st.write(f"**Priority Rank:** #{int(row['priority_rank'])}")
                 if 'trust_score' in row and row['trust_score'] > 0:
                     st.write(f"**Trust Score:** {int(row['trust_score'])}/100")
-                st.write(f"**Niche:** {row['niche']}")
-                st.write(f"**Confidence:** {row['niche_confidence']}")
+                niche_val = row.get('cpa_vertical', row.get('niche', 'Unknown'))
+                st.write(f"**Niche:** {niche_val}")
+                if 'niche_confidence' in row:
+                    st.write(f"**Confidence:** {row['niche_confidence']}")
+                elif 'vertical_confidence' in row:
+                    st.write(f"**Confidence:** {row['vertical_confidence']}")
                 st.write(f"**Service:** {row['service']}")
                 st.write(f"**Parent Domain:** {row['parent_domain']}")
 
