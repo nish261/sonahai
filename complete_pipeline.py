@@ -140,16 +140,20 @@ def run_verification():
 
 def run_niche_analysis():
     """Stage 3: Niche analysis"""
-    update_progress("Stage 3/3: Niche Analysis", 66, "Analyzing affiliate niches...")
+    update_progress("Stage 3/3: Niche Analysis", 66, "Analyzing SEO value and ratings...")
 
-    # Check if there are verified results
-    verified_csv = Path.home() / "Desktop" / "verified_vulnerabilities.csv"
-    if not verified_csv.exists():
-        update_progress("Stage 3/3: Niche Analysis", 100, "⚠️ No verified results to analyze")
+    # Check if there are scan results
+    desktop = Path.home() / "Desktop"
+    results_folder = desktop / "Subdomain_Takeover_Results"
+    scans_folder = results_folder / "Scans"
+    detailed_csv = scans_folder / "subdomain_takeover_detailed.csv"
+
+    if not detailed_csv.exists():
+        update_progress("Stage 3/3: Niche Analysis", 100, "⚠️ No scan results to analyze")
         return True
 
-    # Run niche analysis
-    cmd = ['python', 'niche_analyzer.py']
+    # Run niche analysis on scan results
+    cmd = ['python', 'niche_analyzer.py', str(detailed_csv)]
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     # Monitor progress

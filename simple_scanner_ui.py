@@ -719,13 +719,77 @@ if OUTPUT_FILE.exists():
     st.markdown("---")
     st.subheader(f"🚨 Results")
 
-    with open(OUTPUT_FILE) as f:
-        content = f.read()
+    # Check if niche analysis is available
+    niche_df = None
+    if NICHE_CSV.exists():
+        try:
+            niche_df = pd.read_csv(NICHE_CSV)
+            st.info(f"📊 **SEO Ratings Available!** {len(niche_df)} subdomains rated 1-9 based on value")
+        except:
+            pass
 
-    st.text_area("Findings", content, height=400)
+    # Load and display CSV if available (with ratings if we have them)
+    if DETAILED_FILE.exists():
+        import csv
+        results_df = pd.read_csv(DETAILED_FILE)
+
+        # Merge with niche ratings if available
+        if niche_df is not None:
+            # Merge on subdomain
+            results_df = results_df.merge(
+                niche_df[['subdomain', 'trust_score', 'priority_rank', 'cpa_vertical', 'cpa_value', 'seo_value']],
+                on='subdomain',
+                how='left'
+            )
+            # Convert trust_score to 1-9 scale for display
+            results_df['rating'] = ((results_df['trust_score'] / 100) * 8 + 1).round(0).fillna(0).astype(int)
+            results_df['rating'] = results_df['rating'].replace(0, '—')
+        else:
+            results_df['rating'] = '—'
+
+        # Add rating filter
+        col_filter1, col_filter2 = st.columns([3, 1])
+        with col_filter1:
+            st.markdown("### 📊 Vulnerability Results with SEO Ratings")
+        with col_filter2:
+            if niche_df is not None:
+                rating_filter = st.selectbox(
+                    "Filter by Rating",
+                    ["All Ratings", "🔥 High (7-9)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
+                    key="rating_filter"
+                )
+
+        # Apply filter
+        display_df = results_df.copy()
+        if niche_df is not None and col_filter2:
+            if rating_filter == "🔥 High (7-9)":
+                display_df = display_df[display_df['rating'].isin([7, 8, 9])]
+            elif rating_filter == "⚡ Medium (4-6)":
+                display_df = display_df[display_df['rating'].isin([4, 5, 6])]
+            elif rating_filter == "⚠️ Low (1-3)":
+                display_df = display_df[display_df['rating'].isin([1, 2, 3])]
+            elif rating_filter == "❓ Not Rated":
+                display_df = display_df[display_df['rating'] == '—']
+
+        # Show compact table
+        if len(display_df) > 0:
+            st.dataframe(
+                display_df[['rating', 'subdomain', 'service', 'cname', 'status'] +
+                          (['cpa_vertical', 'seo_value'] if niche_df is not None else [])],
+                use_container_width=True,
+                height=400
+            )
+            st.caption(f"Showing {len(display_df)} of {len(results_df)} total results")
+        else:
+            st.warning("No results match the selected filter")
+    else:
+        # Fallback to text display
+        with open(OUTPUT_FILE) as f:
+            content = f.read()
+        st.text_area("Findings", content, height=400)
 
     # Download buttons
-    col_dl1, col_dl2 = st.columns(2)
+    col_dl1, col_dl2, col_dl3 = st.columns(3)
 
     with col_dl1:
         with open(OUTPUT_FILE, 'rb') as f:
@@ -748,10 +812,22 @@ if OUTPUT_FILE.exists():
                     use_container_width=True
                 )
 
+    with col_dl3:
+        if NICHE_CSV.exists():
+            with open(NICHE_CSV, 'rb') as f:
+                st.download_button(
+                    label="📊 Download Ratings CSV",
+                    data=f,
+                    file_name="seo_ratings.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
     st.success(f"""
     ✅ **Results saved to Desktop:**
     - `{OUTPUT_FILE.name}`
     - `{DETAILED_FILE.name}` (CSV)
+    {'- `' + NICHE_CSV.name + '` (SEO Ratings)' if NICHE_CSV.exists() else ''}
 
     Use the download buttons above to get copies!
     """)

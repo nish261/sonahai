@@ -433,10 +433,11 @@ def analyze_verified_results(input_csv, output_csv):
             trust_score += 5
 
         # Niche value contribution (max 20 points)
-        high_value_niches = ['Finance', 'Health', 'Insurance', 'Real-Estate', 'Gaming']
-        if result['niche'] in high_value_niches:
+        high_value_niches = ['FINANCE', 'HEALTH', 'INSURANCE', 'REAL-ESTATE', 'GAMING']
+        vertical = result.get('cpa_vertical', 'GENERAL').upper()
+        if vertical in high_value_niches:
             trust_score += 20
-        elif result['niche'] != 'General':
+        elif vertical != 'GENERAL':
             trust_score += 10
 
         # Spam score penalty (max -10 points)
