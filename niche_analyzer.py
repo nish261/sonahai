@@ -9,6 +9,7 @@ import csv
 from pathlib import Path
 import requests
 from urllib.parse import urlparse
+import socket
 from dr_backlink_checker import DRBacklinkChecker, load_credentials
 from notification_helper import (
     notify_niche_analysis_complete,
@@ -148,6 +149,174 @@ CPA_VERTICALS = {
         'priority': 1
     }
 }
+
+# Country/Region TLD and domain patterns
+REGION_PATTERNS = {
+    # North America
+    'USA': {
+        'tlds': ['.us', '.gov', '.mil'],
+        'patterns': ['usa', 'united-states', 'american', 'federal'],
+        'continent': 'North America',
+        'cpa_notes': 'Tier 1 - Highest payouts, strict compliance'
+    },
+    'Canada': {
+        'tlds': ['.ca'],
+        'patterns': ['canada', 'canadian', 'quebec', 'ontario'],
+        'continent': 'North America',
+        'cpa_notes': 'Tier 1 - High payouts, bilingual (EN/FR)'
+    },
+    # Europe
+    'UK': {
+        'tlds': ['.uk', '.co.uk', '.gov.uk', '.ac.uk'],
+        'patterns': ['british', 'england', 'scotland', 'wales', 'uk-'],
+        'continent': 'Europe',
+        'cpa_notes': 'Tier 1 - High payouts, strict regulations (GDPR)'
+    },
+    'Germany': {
+        'tlds': ['.de'],
+        'patterns': ['deutsch', 'germany', 'german', 'berlin'],
+        'continent': 'Europe',
+        'cpa_notes': 'Tier 1 - High payouts, strict compliance'
+    },
+    'France': {
+        'tlds': ['.fr'],
+        'patterns': ['france', 'french', 'paris'],
+        'continent': 'Europe',
+        'cpa_notes': 'Tier 1 - High payouts, French language required'
+    },
+    'Netherlands': {
+        'tlds': ['.nl'],
+        'patterns': ['dutch', 'netherlands', 'holland'],
+        'continent': 'Europe',
+        'cpa_notes': 'Tier 1 - High payouts, liberal regulations'
+    },
+    'Spain': {
+        'tlds': ['.es'],
+        'patterns': ['spain', 'spanish', 'espana'],
+        'continent': 'Europe',
+        'cpa_notes': 'Tier 2 - Medium-high payouts, Spanish required'
+    },
+    'Italy': {
+        'tlds': ['.it'],
+        'patterns': ['italy', 'italian', 'italia'],
+        'continent': 'Europe',
+        'cpa_notes': 'Tier 2 - Medium payouts, Italian required'
+    },
+    # Oceania
+    'Australia': {
+        'tlds': ['.au', '.com.au', '.gov.au', '.edu.au'],
+        'patterns': ['australia', 'australian', 'aussie', 'sydney', 'melbourne'],
+        'continent': 'Oceania',
+        'cpa_notes': 'Tier 1 - High payouts, strict regulations'
+    },
+    'New Zealand': {
+        'tlds': ['.nz', '.co.nz'],
+        'patterns': ['newzealand', 'zealand', 'kiwi'],
+        'continent': 'Oceania',
+        'cpa_notes': 'Tier 1 - High payouts'
+    },
+    # Asia
+    'Japan': {
+        'tlds': ['.jp', '.co.jp'],
+        'patterns': ['japan', 'japanese', 'tokyo'],
+        'continent': 'Asia',
+        'cpa_notes': 'Tier 1 - High payouts, Japanese language required'
+    },
+    'Singapore': {
+        'tlds': ['.sg', '.com.sg'],
+        'patterns': ['singapore', 'singapura'],
+        'continent': 'Asia',
+        'cpa_notes': 'Tier 1 - High payouts, English friendly'
+    },
+    'China': {
+        'tlds': ['.cn', '.com.cn'],
+        'patterns': ['china', 'chinese', 'beijing', 'shanghai'],
+        'continent': 'Asia',
+        'cpa_notes': 'Tier 2 - Special regulations, Chinese required'
+    },
+    'India': {
+        'tlds': ['.in', '.co.in'],
+        'patterns': ['india', 'indian', 'mumbai', 'delhi'],
+        'continent': 'Asia',
+        'cpa_notes': 'Tier 2 - Lower payouts, massive volume potential'
+    },
+    'South Korea': {
+        'tlds': ['.kr', '.co.kr'],
+        'patterns': ['korea', 'korean', 'seoul'],
+        'continent': 'Asia',
+        'cpa_notes': 'Tier 1 - High payouts, Korean required'
+    },
+    # Other
+    'Brazil': {
+        'tlds': ['.br', '.com.br'],
+        'patterns': ['brazil', 'brazilian', 'brasil'],
+        'continent': 'South America',
+        'cpa_notes': 'Tier 2 - Medium payouts, Portuguese required'
+    },
+    'Russia': {
+        'tlds': ['.ru', '.su'],
+        'patterns': ['russia', 'russian', 'moscow'],
+        'continent': 'Europe/Asia',
+        'cpa_notes': 'Tier 2 - Special considerations, Russian required'
+    },
+    'International': {
+        'tlds': ['.com', '.net', '.org', '.io', '.co'],
+        'patterns': ['global', 'international', 'world'],
+        'continent': 'Global',
+        'cpa_notes': 'Global - Geo-target based on content/traffic'
+    }
+}
+
+def detect_region(domain):
+    """
+    Detect the geographic region/country of a domain
+
+    Returns: (country, continent, cpa_notes, confidence)
+    """
+    domain_lower = domain.lower()
+
+    # First check TLDs (most reliable)
+    for country, data in REGION_PATTERNS.items():
+        if country == 'International':
+            continue
+
+        for tld in data['tlds']:
+            if domain_lower.endswith(tld):
+                return (country, data['continent'], data['cpa_notes'], 95)
+
+    # Then check patterns in domain name
+    for country, data in REGION_PATTERNS.items():
+        if country == 'International':
+            continue
+
+        for pattern in data['patterns']:
+            if pattern in domain_lower:
+                return (country, data['continent'], data['cpa_notes'], 75)
+
+    # Try IP geolocation for generic TLDs
+    if any(domain_lower.endswith(tld) for tld in ['.com', '.net', '.org', '.io', '.co']):
+        try:
+            # Try to resolve domain and get IP
+            ip = socket.gethostbyname(domain)
+            # Use ipapi.co for free geolocation
+            geo_response = requests.get(f'https://ipapi.co/{ip}/json/', timeout=5)
+            if geo_response.status_code == 200:
+                geo_data = geo_response.json()
+                country_name = geo_data.get('country_name', 'Unknown')
+                continent = geo_data.get('continent_code', 'Unknown')
+
+                # Map to our region patterns
+                for region, rdata in REGION_PATTERNS.items():
+                    if region.lower() in country_name.lower():
+                        return (region, rdata['continent'], rdata['cpa_notes'], 60)
+
+                # Return generic international if we got geo but no match
+                return (country_name, continent, 'Check local CPA networks', 50)
+        except:
+            pass
+
+    # Default to International
+    return ('International', 'Global', 'Geo-target based on content/traffic', 40)
 
 def detect_niche(subdomain, parent_domain):
     """
@@ -357,6 +526,10 @@ def analyze_verified_results(input_csv, output_csv):
         # Detect CPA vertical
         vertical, confidence, offers, cpa_value, networks, priority = detect_niche(subdomain, parent_domain)
 
+        # Detect geographic region
+        print(f"  → Detecting region for {parent_domain}...")
+        region_country, region_continent, region_cpa_notes, region_confidence = detect_region(parent_domain)
+
         # Check actual DR and backlinks (with caching)
         print(f"  → Checking DR/backlinks for {parent_domain}...")
         dr_data = dr_checker.check_domain(parent_domain, prefer_cache=True)
@@ -394,6 +567,10 @@ def analyze_verified_results(input_csv, output_csv):
             'service': service,
             'cname': cname,
             'status': status,
+            'region_country': region_country,
+            'region_continent': region_continent,
+            'region_cpa_notes': region_cpa_notes,
+            'region_confidence': f"{region_confidence}%",
             'cpa_vertical': vertical,
             'vertical_confidence': f"{confidence}%",
             'cpa_offers': offers,
@@ -433,7 +610,7 @@ def analyze_verified_results(input_csv, output_csv):
             trust_score += 5
 
         # Niche value contribution (max 20 points)
-        high_value_niches = ['FINANCE', 'HEALTH', 'INSURANCE', 'REAL-ESTATE', 'GAMING']
+        high_value_niches = ['FINANCE', 'NUTRA', 'GAMBLING', 'INSURANCE', 'DATING', 'CRYPTO']
         vertical = result.get('cpa_vertical', 'GENERAL').upper()
         if vertical in high_value_niches:
             trust_score += 20
@@ -468,6 +645,7 @@ def analyze_verified_results(input_csv, output_csv):
     if results_sorted:
         fieldnames = [
             'priority_rank', 'trust_score', 'subdomain', 'parent_domain', 'service', 'cname', 'status',
+            'region_country', 'region_continent', 'region_cpa_notes', 'region_confidence',
             'cpa_vertical', 'vertical_confidence', 'cpa_offers', 'cpa_value', 'cpa_networks', 'priority_score',
             'domain_authority', 'actual_da', 'total_backlinks', 'linking_domains',
             'spam_score', 'dr_source', 'seo_value', 'historical_content'
@@ -515,7 +693,7 @@ def analyze_verified_results(input_csv, output_csv):
         # Print summary statistics
         niche_counts = {}
         for r in results_sorted:
-            niche = r['niche']
+            niche = r.get('cpa_vertical', 'UNKNOWN')
             niche_counts[niche] = niche_counts.get(niche, 0) + 1
 
         print("\nNiche Distribution:")
@@ -540,8 +718,8 @@ def analyze_verified_results(input_csv, output_csv):
             backlinks = r.get('total_backlinks', 0)
             trust = r['trust_score']
             print(f"  #{i} [Trust: {trust}/100] {r['subdomain']}")
-            print(f"      Service: {r['service']} | Niche: {r['niche']} | DA: {da}/100 | Backlinks: {backlinks:,}")
-            print(f"      Value: {r['affiliate_value']} | SEO: {r['seo_value']}")
+            print(f"      Service: {r['service']} | Niche: {r.get('cpa_vertical', 'UNKNOWN')} | DA: {da}/100 | Backlinks: {backlinks:,}")
+            print(f"      Value: {r.get('cpa_value', 'Unknown')} | SEO: {r['seo_value']}")
             print()
 
     else:

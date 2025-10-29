@@ -418,12 +418,62 @@ with st.sidebar.expander("Scan Settings", expanded=True):
     )
 
     st.markdown("---")
+    st.markdown("**🌍 Country/Region Filter** (Optional)")
+
+    use_country_filter = st.checkbox(
+        "Filter by country/region",
+        value=False,
+        help="Only scan domains from specific countries"
+    )
+
+    target_countries = ""
+    if use_country_filter:
+        country_options = st.multiselect(
+            "Select Countries",
+            ["USA (.us, .gov, .mil)", "Australia (.au)", "UK (.uk, .co.uk)",
+             "Canada (.ca)", "Germany (.de)", "France (.fr)", "Netherlands (.nl)",
+             "Spain (.es)", "Italy (.it)", "Japan (.jp)", "China (.cn)",
+             "India (.in)", "Brazil (.br)", "Russia (.ru)", "Singapore (.sg)",
+             "New Zealand (.nz)", "South Korea (.kr)"],
+            default=["USA (.us, .gov, .mil)", "Australia (.au)"],
+            help="Select countries to scan. Only domains with these TLDs will be scanned."
+        )
+
+        # Map selections to actual TLDs
+        country_tld_map = {
+            "USA (.us, .gov, .mil)": [".us", ".gov", ".mil"],
+            "Australia (.au)": [".au", ".com.au", ".gov.au", ".edu.au"],
+            "UK (.uk, .co.uk)": [".uk", ".co.uk", ".gov.uk", ".ac.uk"],
+            "Canada (.ca)": [".ca"],
+            "Germany (.de)": [".de"],
+            "France (.fr)": [".fr"],
+            "Netherlands (.nl)": [".nl"],
+            "Spain (.es)": [".es"],
+            "Italy (.it)": [".it"],
+            "Japan (.jp)": [".jp", ".co.jp"],
+            "China (.cn)": [".cn", ".com.cn"],
+            "India (.in)": [".in", ".co.in"],
+            "Brazil (.br)": [".br", ".com.br"],
+            "Russia (.ru)": [".ru"],
+            "Singapore (.sg)": [".sg", ".com.sg"],
+            "New Zealand (.nz)": [".nz", ".co.nz"],
+            "South Korea (.kr)": [".kr", ".co.kr"]
+        }
+
+        # Build TLD list from selections
+        tld_list = []
+        for country in country_options:
+            tld_list.extend(country_tld_map.get(country, []))
+
+        target_countries = ", ".join(tld_list)
+
+    st.markdown("---")
     st.markdown("**🔍 Domain Extension Filter** (Optional)")
 
     use_extension_filter = st.checkbox(
         "Filter by extension",
         value=False,
-        help="Only scan subdomains with specific extensions"
+        help="Only scan subdomains with specific extensions (overrides country filter if both enabled)"
     )
 
     target_extensions = ""
@@ -435,6 +485,14 @@ with st.sidebar.expander("Scan Settings", expanded=True):
             help="Only scan subdomains ending with these extensions. Example: .com, .io, .ai"
         )
 
+    # Show summary of filters
+    if use_country_filter and not use_extension_filter:
+        st.info(f"""
+        **Target:** Ranks {start_rank:,} - {start_rank + num_domains:,}
+        **Countries:** {', '.join([c.split('(')[0].strip() for c in country_options]) if country_options else 'All'}
+        **TLDs:** {target_countries if target_countries else 'All'}
+        """)
+    elif use_extension_filter:
         st.info(f"""
         **Target:** Ranks {start_rank:,} - {start_rank + num_domains:,}
         **Extensions:** {target_extensions if target_extensions else 'All'}
@@ -650,7 +708,14 @@ with col_btn1:
                 f.unlink()
 
         # Create runner script with proxy support
-        extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
+        # Priority: country filter > extension filter > all
+        if use_country_filter and target_countries:
+            extensions_str = target_countries
+        elif use_extension_filter and target_extensions:
+            extensions_str = target_extensions
+        else:
+            extensions_str = 'ALL'
+
         service_filter_str = st.session_state.get('service_filter', 'ALL')
 
         # Get proxy environment variables
@@ -679,7 +744,14 @@ with col_btn2:
                 f.unlink()
 
         # Create runner script with proxy support
-        extensions_str = target_extensions if use_extension_filter and target_extensions else 'ALL'
+        # Priority: country filter > extension filter > all
+        if use_country_filter and target_countries:
+            extensions_str = target_countries
+        elif use_extension_filter and target_extensions:
+            extensions_str = target_extensions
+        else:
+            extensions_str = 'ALL'
+
         service_filter_str = st.session_state.get('service_filter', 'ALL')
 
         # Get proxy environment variables
@@ -751,9 +823,13 @@ if OUTPUT_FILE.exists():
 
         # Merge with niche ratings if available
         if niche_df is not None:
-            # Merge on subdomain
+            # Merge on subdomain - include region columns if they exist
+            merge_cols = ['subdomain', 'trust_score', 'priority_rank', 'cpa_vertical', 'cpa_value', 'seo_value']
+            if 'region_country' in niche_df.columns:
+                merge_cols.extend(['region_country', 'region_continent', 'region_cpa_notes'])
+
             results_df = results_df.merge(
-                niche_df[['subdomain', 'trust_score', 'priority_rank', 'cpa_vertical', 'cpa_value', 'seo_value']],
+                niche_df[[col for col in merge_cols if col in niche_df.columns]],
                 on='subdomain',
                 how='left'
             )
@@ -789,15 +865,30 @@ if OUTPUT_FILE.exists():
         # Single unified table with all info
         st.markdown("### 📊 All Results")
 
-        # Add rating filter
+        # Add filters
         if niche_df is not None:
-            rating_filter = st.selectbox(
-                "Filter by Rating",
-                ["All Ratings", "🔥 High (7-10)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
-                key="rating_filter"
-            )
+            col_f1, col_f2 = st.columns(2)
 
-            # Apply filter
+            with col_f1:
+                rating_filter = st.selectbox(
+                    "Filter by Rating",
+                    ["All Ratings", "🔥 High (7-10)", "⚡ Medium (4-6)", "⚠️ Low (1-3)", "❓ Not Rated"],
+                    key="rating_filter"
+                )
+
+            with col_f2:
+                # Region filter (if region data exists)
+                if 'region_country' in results_df.columns:
+                    unique_regions = ['All Regions'] + sorted(results_df['region_country'].dropna().unique().tolist())
+                    region_filter = st.selectbox(
+                        "Filter by Region",
+                        unique_regions,
+                        key="region_filter"
+                    )
+                else:
+                    region_filter = "All Regions"
+
+            # Apply filters
             display_df = results_df.copy()
             if rating_filter == "🔥 High (7-10)":
                 display_df = display_df[display_df['rating'].isin([7, 8, 9, 10])]
@@ -807,6 +898,10 @@ if OUTPUT_FILE.exists():
                 display_df = display_df[display_df['rating'].isin([1, 2, 3])]
             elif rating_filter == "❓ Not Rated":
                 display_df = display_df[display_df['rating'] == '—']
+
+            # Apply region filter
+            if region_filter != "All Regions" and 'region_country' in display_df.columns:
+                display_df = display_df[display_df['region_country'] == region_filter]
         else:
             display_df = results_df.copy()
 
@@ -1017,6 +1112,29 @@ python niche_analyzer.py
 if NICHE_CSV.exists():
     # Ratings already shown in main table above - just show download
     st.info(f"✅ SEO ratings complete - all data merged into main results table above")
+
+    # Show region distribution if available
+    try:
+        niche_full_df = pd.read_csv(NICHE_CSV)
+        if 'region_country' in niche_full_df.columns:
+            st.markdown("#### 🌍 Geographic Distribution")
+
+            col_r1, col_r2 = st.columns(2)
+
+            with col_r1:
+                region_counts = niche_full_df['region_country'].value_counts()
+                st.markdown("**Top Countries:**")
+                for country, count in region_counts.head(10).items():
+                    st.text(f"  {country}: {count}")
+
+            with col_r2:
+                if 'region_continent' in niche_full_df.columns:
+                    continent_counts = niche_full_df['region_continent'].value_counts()
+                    st.markdown("**By Continent:**")
+                    for continent, count in continent_counts.items():
+                        st.text(f"  {continent}: {count}")
+    except:
+        pass
 
     with open(NICHE_CSV, 'rb') as f:
         st.download_button(
