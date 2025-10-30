@@ -2,20 +2,13 @@
 """
 Niche Analyzer for Subdomain Takeovers
 Analyzes subdomains and suggests affiliate marketing niches
+SIMPLIFIED VERSION - Removed external API dependencies for reliability
 """
 
 import re
 import csv
 from pathlib import Path
-import requests
 from urllib.parse import urlparse
-import socket
-from dr_backlink_checker import DRBacklinkChecker, load_credentials
-from notification_helper import (
-    notify_niche_analysis_complete,
-    notify_high_value_target,
-    notify_error
-)
 
 # High-value CPA offer verticals
 # Focused on performance marketing & CPA networks (MaxBounty, CrakRevenue, etc.)
@@ -269,7 +262,7 @@ REGION_PATTERNS = {
 
 def detect_region(domain):
     """
-    Detect the geographic region/country of a domain
+    Detect the geographic region/country of a domain (SIMPLIFIED - No external API calls)
 
     Returns: (country, continent, cpa_notes, confidence)
     """
@@ -293,29 +286,7 @@ def detect_region(domain):
             if pattern in domain_lower:
                 return (country, data['continent'], data['cpa_notes'], 75)
 
-    # Try IP geolocation for generic TLDs
-    if any(domain_lower.endswith(tld) for tld in ['.com', '.net', '.org', '.io', '.co']):
-        try:
-            # Try to resolve domain and get IP
-            ip = socket.gethostbyname(domain)
-            # Use ipapi.co for free geolocation
-            geo_response = requests.get(f'https://ipapi.co/{ip}/json/', timeout=5)
-            if geo_response.status_code == 200:
-                geo_data = geo_response.json()
-                country_name = geo_data.get('country_name', 'Unknown')
-                continent = geo_data.get('continent_code', 'Unknown')
-
-                # Map to our region patterns
-                for region, rdata in REGION_PATTERNS.items():
-                    if region.lower() in country_name.lower():
-                        return (region, rdata['continent'], rdata['cpa_notes'], 60)
-
-                # Return generic international if we got geo but no match
-                return (country_name, continent, 'Check local CPA networks', 50)
-        except:
-            pass
-
-    # Default to International
+    # Default to International (removed slow IP geolocation)
     return ('International', 'Global', 'Geo-target based on content/traffic', 40)
 
 def detect_niche(subdomain, parent_domain):
@@ -378,72 +349,77 @@ def detect_niche(subdomain, parent_domain):
 
 def analyze_domain_authority(parent_domain):
     """
-    Estimate domain authority based on TLD and common patterns
-
-    Note: This is a rough estimate. Real DA requires tools like Moz/Ahrefs
+    Estimate domain authority based on TLD and common patterns (SIMPLIFIED)
+    Returns: estimated DA score (0-100)
     """
-    # High authority TLDs and domains
+    # High authority TLDs
     high_authority = ['.gov', '.edu', '.mil']
     medium_authority = ['.org', '.com', '.net']
 
     # Check TLD
     for tld in high_authority:
         if parent_domain.endswith(tld):
-            return 'High (70-100)'
+            return 80  # High authority estimate
 
     for tld in medium_authority:
         if parent_domain.endswith(tld):
-            # Check if it's a known brand (simplified)
-            if len(parent_domain.split('.')[0]) > 8:  # Longer domains often less authority
-                return 'Medium (40-70)'
+            # Domain length heuristic
+            domain_name = parent_domain.split('.')[0]
+            if len(domain_name) <= 8:  # Short domains tend to be more authoritative
+                return 60
             else:
-                return 'Medium-High (50-80)'
+                return 45
 
-    return 'Unknown (30-60)'
+    return 35  # Default low authority
 
 def get_historical_content(subdomain):
     """
-    Try to get historical content from Wayback Machine
-
-    Returns: snippet of what the subdomain was used for
+    Check for historical content indicators (SIMPLIFIED - no API calls)
+    Returns: simple indicator based on subdomain name patterns
     """
-    try:
-        # Check if subdomain is available in Wayback Machine
-        api_url = f"https://archive.org/wayback/available?url={subdomain}"
-        response = requests.get(api_url, timeout=5)
+    subdomain_lower = subdomain.lower()
 
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('archived_snapshots', {}).get('closest'):
-                snapshot = data['archived_snapshots']['closest']
-                timestamp = snapshot.get('timestamp', 'Unknown')
-                return f"Archived (last snapshot: {timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]})"
+    # Check for patterns that suggest old/archived content
+    old_patterns = ['old', 'legacy', 'archive', 'backup', 'deprecated', 'v1', 'v2', 'v3', 'beta', 'staging']
 
-        return "No archive found"
-    except:
-        return "Archive check failed"
+    for pattern in old_patterns:
+        if pattern in subdomain_lower:
+            return f"Likely archived (contains '{pattern}')"
+
+    return "No archive indicators"
 
 def estimate_seo_value(subdomain, parent_domain, niche, domain_authority):
     """
-    Estimate SEO value for affiliate marketing
-
+    Estimate SEO value for affiliate marketing (SIMPLIFIED)
+    domain_authority should now be a number 0-100
     Returns: Low/Medium/High/Very High
     """
     score = 0
 
-    # Domain authority contribution
-    if 'High' in domain_authority:
-        score += 40
-    elif 'Medium' in domain_authority:
-        score += 20
+    # Domain authority contribution (now expects numeric DA)
+    if isinstance(domain_authority, int):
+        if domain_authority >= 70:
+            score += 40
+        elif domain_authority >= 50:
+            score += 30
+        elif domain_authority >= 30:
+            score += 20
+        else:
+            score += 10
     else:
-        score += 10
+        # Fallback for old string format
+        if 'High' in str(domain_authority):
+            score += 40
+        elif 'Medium' in str(domain_authority):
+            score += 20
+        else:
+            score += 10
 
     # Niche contribution
-    high_value_niches = ['Finance', 'Health', 'Insurance', 'Real-Estate', 'Gaming']
-    if niche in high_value_niches:
+    high_value_niches = ['NUTRA', 'DATING', 'GAMBLING', 'FINANCE', 'INSURANCE', 'CRYPTO']
+    if niche.upper() in high_value_niches:
         score += 30
-    elif niche != 'General':
+    elif niche != 'GENERAL':
         score += 15
 
     # Subdomain length (shorter = better)
@@ -486,16 +462,7 @@ def analyze_verified_results(input_csv, output_csv):
     results = []
 
     print("🔍 Analyzing niches for verified vulnerabilities...")
-
-    # Initialize DR/Backlink checker
-    print("🔗 Initializing DR/Backlink checker...")
-    access_id, secret_key = load_credentials()
-    dr_checker = DRBacklinkChecker(access_id, secret_key)
-
-    if access_id and secret_key:
-        print("✓ Using Moz API for DR/backlink data")
-    else:
-        print("⚠️  No Moz API credentials - using web scraping fallback")
+    print("✓ Using simplified analysis (no external API dependencies)")
 
     with open(input_csv, 'r') as f:
         reader = csv.DictReader(f)
@@ -530,35 +497,36 @@ def analyze_verified_results(input_csv, output_csv):
         print(f"  → Detecting region for {parent_domain}...")
         region_country, region_continent, region_cpa_notes, region_confidence = detect_region(parent_domain)
 
-        # Check actual DR and backlinks (with caching)
-        print(f"  → Checking DR/backlinks for {parent_domain}...")
-        dr_data = dr_checker.check_domain(parent_domain, prefer_cache=True)
+        # Estimate domain authority (simplified, no external API)
+        print(f"  → Estimating domain authority...")
+        actual_da = analyze_domain_authority(parent_domain)
 
-        actual_da = dr_data.get('domain_authority', 0)
-        actual_backlinks = dr_data.get('total_backlinks', 0)
-        linking_domains = dr_data.get('linking_domains', 0)
-        spam_score = dr_data.get('spam_score', 0)
-        dr_source = dr_data.get('source', 'Unknown')
-
-        # Use actual DA instead of estimate
-        if actual_da > 0:
-            if actual_da >= 70:
-                domain_authority = f'High ({actual_da}/100)'
-            elif actual_da >= 50:
-                domain_authority = f'Medium-High ({actual_da}/100)'
-            elif actual_da >= 30:
-                domain_authority = f'Medium ({actual_da}/100)'
-            else:
-                domain_authority = f'Low ({actual_da}/100)'
+        # Estimate backlinks based on DA (heuristic)
+        if actual_da >= 70:
+            actual_backlinks = 5000
+            linking_domains = 500
+            domain_authority = f'High ({actual_da}/100)'
+        elif actual_da >= 50:
+            actual_backlinks = 1000
+            linking_domains = 100
+            domain_authority = f'Medium-High ({actual_da}/100)'
+        elif actual_da >= 30:
+            actual_backlinks = 100
+            linking_domains = 20
+            domain_authority = f'Medium ({actual_da}/100)'
         else:
-            # Fallback to estimation
-            domain_authority = analyze_domain_authority(parent_domain)
+            actual_backlinks = 10
+            linking_domains = 5
+            domain_authority = f'Low ({actual_da}/100)'
+
+        spam_score = 0  # Default to 0 (can't check without API)
+        dr_source = 'Estimated'
 
         # Get historical content
         historical = get_historical_content(subdomain)
 
-        # Estimate SEO value (using actual DA now)
-        seo_value = estimate_seo_value(subdomain, parent_domain, vertical, domain_authority)
+        # Estimate SEO value
+        seo_value = estimate_seo_value(subdomain, parent_domain, vertical, actual_da)
 
         # Build result
         result = {
@@ -674,19 +642,6 @@ def analyze_verified_results(input_csv, output_csv):
         print(f"📊 Results saved to: {output_csv}")
         if high_priority:
             print(f"🎯 Top priority targets saved to: {top_targets_csv}")
-
-        # Notify analysis complete
-        notify_niche_analysis_complete(len(high_priority), len(results_sorted))
-
-        # Notify about top high-value targets
-        for r in results_sorted[:3]:  # Top 3 only
-            if r['trust_score'] >= 70:
-                notify_high_value_target(
-                    r['subdomain'],
-                    r.get('cpa_vertical', 'UNKNOWN'),
-                    r.get('cpa_value', 'Unknown'),
-                    int(r['trust_score'])
-                )
 
         print(f"\n📈 Summary:")
 
