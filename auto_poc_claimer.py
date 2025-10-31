@@ -11,15 +11,20 @@ import time
 from pathlib import Path
 from datetime import datetime
 import csv
+from credentials_loader import (
+    load_all_credentials,
+    get_aws_credentials,
+    get_github_credentials,
+    get_researcher_profile,
+    setup_aws_environment,
+    setup_proxy_environment,
+    print_credentials_status
+)
 
-# Load credentials
+# Load credentials (legacy compatibility)
 def load_credentials():
-    """Load saved credentials."""
-    creds_file = Path.home() / '.subdomain_scanner_creds.json'
-    if creds_file.exists():
-        with open(creds_file) as f:
-            return json.load(f)
-    return None
+    """Load credentials using new unified loader."""
+    return load_all_credentials()
 
 # Generate PoC HTML
 def generate_poc_html(subdomain, service, cname, researcher_name):

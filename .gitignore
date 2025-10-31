@@ -20,9 +20,13 @@ subdominator_output.txt
 cname_debug.txt
 test_*.txt
 
-# Credentials
+# Credentials - NEVER COMMIT THESE!
 *.enc
 .bugbounty_creds.enc
+account_details.json
+.subdomain_scanner_creds.json
+*.credentials.json
+*_credentials.json
 
 # Results folders
 Desktop/

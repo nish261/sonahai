@@ -1,0 +1,76 @@
+{
+  "_comment": "Fill in your credentials below. After filling, rename this file to 'account_details.json'",
+  "_security_warning": "NEVER commit this file to git! It contains sensitive credentials.",
+
+  "researcher_profile": {
+    "name": "Your Name Here",
+    "email": "your.email@example.com",
+    "hackerone_username": "",
+    "bugcrowd_username": ""
+  },
+
+  "aws": {
+    "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+    "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "default_region": "us-east-1",
+    "_note": "Get from: https://console.aws.amazon.com/iam/home#/security_credentials"
+  },
+
+  "azure": {
+    "method": "cli",
+    "_note": "Just run 'az login' in terminal, OR fill in details below for username/password login",
+    "username": "",
+    "password": "",
+    "subscription_id": "",
+    "tenant_id": ""
+  },
+
+  "github": {
+    "username": "your-github-username",
+    "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "_note": "Create token at: https://github.com/settings/tokens with 'repo' scope"
+  },
+
+  "digitalocean": {
+    "api_token": "",
+    "_note": "Get from: https://cloud.digitalocean.com/account/api/tokens"
+  },
+
+  "heroku": {
+    "api_key": "",
+    "email": "",
+    "_note": "Get from: https://dashboard.heroku.com/account"
+  },
+
+  "netlify": {
+    "access_token": "",
+    "_note": "Get from: https://app.netlify.com/user/applications#personal-access-tokens"
+  },
+
+  "vercel": {
+    "token": "",
+    "_note": "Get from: https://vercel.com/account/tokens"
+  },
+
+  "cloudflare": {
+    "email": "",
+    "api_key": "",
+    "zone_id": "",
+    "_note": "Get from: https://dash.cloudflare.com/profile/api-tokens"
+  },
+
+  "moz_api": {
+    "access_id": "",
+    "secret_key": "",
+    "_note": "Optional: For better Domain Authority scores. Get from: https://moz.com/products/api"
+  },
+
+  "proxy": {
+    "enabled": false,
+    "http_proxy": "http://proxy.example.com:8080",
+    "https_proxy": "http://proxy.example.com:8080",
+    "username": "",
+    "password": "",
+    "_note": "Optional: To avoid rate limiting during scans"
+  }
+}
