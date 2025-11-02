@@ -419,126 +419,30 @@ def run_subdominator(subdomains_file, output_file):
         return None, "Subdominator not found"
 
     try:
-        # Run Subdominator with validation (no timeout - can take a while for large lists)
+        # Run Subdominator with validation
         result = subprocess.run(
             [subdominator_path, '-l', str(subdomains_file), '-o', str(output_file),
              '--validate', '-q', '-t', '50'],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=600
         )
 
-        # Check if output file has results (Subdominator returns exit code 1 even on success)
-        if output_file.exists() and output_file.stat().st_size > 0:
+        if result.returncode == 0:
             return output_file, None
         else:
-            return None, f"Subdominator failed: {result.stderr if result.stderr else 'No output generated'}"
+            return None, f"Subdominator failed: {result.stderr}"
     except subprocess.TimeoutExpired:
         return None, "Subdominator timed out"
     except Exception as e:
         return None, f"Subdominator error: {str(e)}"
 
-def parse_subdominator_output(output_file, service_filter=None):
-    """Parse Subdominator output into our format.
-
-    Args:
-        output_file: Path to Subdominator output file
-        service_filter: List of services to include (None = all services)
-    """
+def parse_subdominator_output(output_file):
+    """Parse Subdominator output into our format."""
     vulnerabilities = []
 
     if not output_file or not Path(output_file).exists():
         return vulnerabilities
-
-    # OFFICIAL list from can-i-take-over-xyz (EdOverflow)
-    # Source: https://github.com/EdOverflow/can-i-take-over-xyz
-    # Last updated: 2024-10-24
-    # Mapping: Subdominator service name -> Display name
-    VULNERABLE_SERVICES = {
-        # Cloud Providers
-        'AWS/S3': 'AWS/S3',
-        'AWS/Elastic Beanstalk': 'AWS/Elastic Beanstalk',
-        'Microsoft Azure': 'Microsoft Azure',
-        'Digital Ocean': 'Digital Ocean',
-
-        # Development Platforms
-        'Bitbucket': 'Bitbucket',
-        'Github': 'Github',  # Note: Subdominator may use "Github" not "GitHub"
-        'JetBrains': 'JetBrains',
-        'Ngrok': 'Ngrok',
-        'Pantheon': 'Pantheon',
-        'Readthedocs': 'Readthedocs',
-
-        # CMS/Blogging
-        'Ghost': 'Ghost',
-        'HatenaBlog': 'HatenaBlog',
-        'Wordpress': 'Wordpress',
-        'Worksites': 'Worksites',
-
-        # Marketing/Landing Pages
-        'LaunchRock': 'LaunchRock',
-        'Smugsmug': 'Smugsmug',
-        'Strikingly': 'Strikingly',
-        'Surge.sh': 'Surge.sh',
-        'Uberflip': 'Uberflip',
-
-        # Support/Help Desk
-        'Cargo Collective': 'Cargo Collective',
-        'Help Juice': 'Help Juice',
-        'Help Scout': 'Help Scout',
-        'Helprace': 'Helprace',
-        'Pingdom': 'Pingdom',
-        'Readme.io': 'Readme.io',
-
-        # Business/CRM
-        'Agile CRM': 'Agile CRM',
-        'Campaign Monitor': 'Campaign Monitor',
-        'Canny': 'Canny',
-        'Gemfury': 'Gemfury',
-        'Getresponse': 'Getresponse',
-        'SmartJobBoard': 'SmartJobBoard',
-        'SurveySparrow': 'SurveySparrow',
-        'Uptimerobot': 'Uptimerobot',
-
-        # Other Services
-        'Airee.ru': 'Airee.ru',
-        'Anima': 'Anima',
-        'Discourse': 'Discourse',
-        'Short.io': 'Short.io',
-    }
-
-    # Services to EXCLUDE (NOT vulnerable according to can-i-take-over-xyz)
-    # Source: https://github.com/EdOverflow/can-i-take-over-xyz
-    # Last updated: 2024-10-24
-    EXCLUDED_SERVICES = {
-        'Acquia',                   # NOT vulnerable
-        'Akamai',                   # NOT vulnerable
-        'AWS/Load Balancer (ELB)',  # NOT vulnerable
-        'Cloudfront',               # NOT vulnerable - requires AWS account
-        'CloudFront',               # Alternate spelling
-        'Cloudflare',               # NOT vulnerable
-        'Desk',                     # NOT vulnerable
-        'Dreamhost',                # NOT vulnerable
-        'Fastly',                   # NOT vulnerable - requires private key
-        'Feedpress',                # NOT vulnerable
-        'Firebase',                 # NOT vulnerable
-        'Fly.io',                   # NOT vulnerable
-        'Freshdesk',                # NOT vulnerable
-        'Gitlab',                   # NOT vulnerable
-        'Google Cloud Storage',     # NOT vulnerable
-        'Google Sites',             # NOT vulnerable
-        'HubSpot',                  # NOT vulnerable
-        'Instapage',                # NOT vulnerable (was vulnerable, now fixed)
-        'Key CDN',                  # NOT vulnerable
-        'Kinsta',                   # NOT vulnerable
-        'Mailchimp',                # NOT vulnerable
-        'Sendgrid',                 # NOT vulnerable
-        'Squarespace',              # NOT vulnerable
-        'Statuspage',               # NOT vulnerable (was vulnerable, now fixed)
-        'Unbounce',                 # NOT vulnerable (was vulnerable, now fixed)
-        'UserVoice',                # NOT vulnerable (was vulnerable, now fixed)
-        'WP Engine',                # NOT vulnerable
-        'Zendesk',                  # NOT vulnerable (was vulnerable, now fixed)
-    }
 
     try:
         with open(output_file, 'r') as f:
@@ -557,31 +461,6 @@ def parse_subdominator_output(output_file, service_filter=None):
                     if service_end > 0:
                         service = line[1:service_end]
                         line = line[service_end + 1:].strip()
-
-                # FILTER: Skip non-vulnerable services (Fastly, CloudFront, etc.)
-                if service in EXCLUDED_SERVICES:
-                    continue
-
-                # Only include known vulnerable services
-                if service not in VULNERABLE_SERVICES:
-                    # Log unknown services for future additions
-                    with open(Path("unknown_services.txt"), 'a') as uf:
-                        uf.write(f"{service}\n")
-                    continue
-
-                # Map to standardized name
-                standardized_service = VULNERABLE_SERVICES[service]
-
-                # Apply service filter if specified
-                if service_filter is not None and len(service_filter) > 0:
-                    # Check if this service matches any in the filter
-                    service_matches = False
-                    for filter_service in service_filter:
-                        if filter_service.lower() in standardized_service.lower():
-                            service_matches = True
-                            break
-                    if not service_matches:
-                        continue
 
                 # Split subdomain and CNAME
                 subdomain = ''
@@ -603,7 +482,7 @@ def parse_subdominator_output(output_file, service_filter=None):
                 if subdomain:
                     vuln = {
                         'subdomain': subdomain,
-                        'service': standardized_service,  # Use standardized name
+                        'service': service,
                         'cname': cname,
                         'status': '⚠️ DANGLING - HIGH PRIORITY!',  # Subdominator already validates
                         'difficulty': 'Easy'
@@ -617,7 +496,7 @@ def parse_subdominator_output(output_file, service_filter=None):
 def main():
     """Main scanner."""
     if len(sys.argv) < 3:
-        print("Usage: aggressive_scanner.py <start_rank> <num_domains> [extensions] [enum_workers] [scan_workers] [service_filter]")
+        print("Usage: aggressive_scanner.py <start_rank> <num_domains> [extensions] [enum_workers] [scan_workers]")
         sys.exit(1)
 
     start_rank = int(sys.argv[1])
@@ -625,13 +504,6 @@ def main():
     target_extensions = sys.argv[3] if len(sys.argv) > 3 else 'ALL'
     enum_workers = int(sys.argv[4]) if len(sys.argv) > 4 else 10
     scan_workers = int(sys.argv[5]) if len(sys.argv) > 5 else 30
-    service_filter = sys.argv[6] if len(sys.argv) > 6 else 'ALL'
-
-    # Parse service filter
-    if service_filter == 'ALL' or service_filter == 'NONE':
-        filtered_services = None if service_filter == 'ALL' else []
-    else:
-        filtered_services = [s.strip() for s in service_filter.split(',')]
 
     try:
         # Clean old files
@@ -730,7 +602,7 @@ def main():
                 update_status("Parsing results...", "Phase 3: Scanning", "✓ Subdominator scan complete")
                 update_progress(90)
 
-                vulnerabilities = parse_subdominator_output(result_file, filtered_services)
+                vulnerabilities = parse_subdominator_output(result_file)
 
                 update_status(
                     f"Found {len(vulnerabilities)} vulns",
