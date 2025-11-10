@@ -1,0 +1,505 @@
+#!/usr/bin/env python3
+"""
+PoC Generator for Subdomain Takeover Vulnerabilities
+Generates professional proof-of-concept files for bug bounty submissions
+"""
+
+import csv
+from pathlib import Path
+from datetime import datetime
+import hashlib
+
+DESKTOP_PATH = Path.home() / "Desktop"
+RESULTS_FOLDER = DESKTOP_PATH / "Subdomain_Takeover_Results"
+POC_FOLDER = RESULTS_FOLDER / "PoC_Files"
+VERIFIED_FOLDER = RESULTS_FOLDER / "Verified_Vulnerabilities"
+
+# Create PoC folder
+POC_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# Your bug bounty details (customize these!)
+BUG_BOUNTY_DETAILS = {
+    'researcher_name': 'YourName',  # Change this!
+    'researcher_email': 'your@email.com',  # Change this!
+    'platform': 'HackerOne/BugCrowd/etc',  # Which platform?
+}
+
+
+def generate_poc_token():
+    """Generate a unique PoC token for verification"""
+    timestamp = datetime.now().isoformat()
+    unique_string = f"{BUG_BOUNTY_DETAILS['researcher_name']}-{timestamp}"
+    return hashlib.md5(unique_string.encode()).hexdigest()[:12]
+
+
+def generate_html_poc(subdomain, service, cname, evidence):
+    """Generate HTML PoC file"""
+    poc_token = generate_poc_token()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subdomain Takeover PoC - {subdomain}</title>
+    <style>
+        body {{
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff00;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }}
+        .container {{
+            border: 2px solid #00ff00;
+            padding: 30px;
+            background: #111;
+        }}
+        h1 {{
+            color: #ff0000;
+            text-align: center;
+            font-size: 32px;
+            margin-bottom: 30px;
+        }}
+        .info {{
+            background: #1a1a1a;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #00ff00;
+        }}
+        .label {{
+            color: #ffff00;
+            font-weight: bold;
+        }}
+        .value {{
+            color: #00ff00;
+        }}
+        .token {{
+            background: #ff0000;
+            color: #fff;
+            padding: 10px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            margin: 20px 0;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 12px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚠️ SUBDOMAIN TAKEOVER - PROOF OF CONCEPT ⚠️</h1>
+
+        <div class="info">
+            <span class="label">Subdomain:</span>
+            <span class="value">{subdomain}</span>
+        </div>
+
+        <div class="info">
+            <span class="label">Service:</span>
+            <span class="value">{service}</span>
+        </div>
+
+        <div class="info">
+            <span class="label">CNAME:</span>
+            <span class="value">{cname}</span>
+        </div>
+
+        <div class="info">
+            <span class="label">Discovered:</span>
+            <span class="value">{timestamp}</span>
+        </div>
+
+        <div class="info">
+            <span class="label">Researcher:</span>
+            <span class="value">{BUG_BOUNTY_DETAILS['researcher_name']} ({BUG_BOUNTY_DETAILS['researcher_email']})</span>
+        </div>
+
+        <div class="info">
+            <span class="label">Platform:</span>
+            <span class="value">{BUG_BOUNTY_DETAILS['platform']}</span>
+        </div>
+
+        <div class="token">
+            PoC Token: {poc_token}
+        </div>
+
+        <div class="info">
+            <span class="label">Vulnerability:</span>
+            <span class="value">This subdomain is vulnerable to takeover. An attacker could claim this resource and serve malicious content.</span>
+        </div>
+
+        <div class="info">
+            <span class="label">Evidence:</span>
+            <span class="value">{evidence}</span>
+        </div>
+
+        <div class="info">
+            <span class="label">Impact:</span>
+            <span class="value">
+                • Phishing attacks using trusted domain<br>
+                • Malware distribution<br>
+                • Cookie theft (session hijacking)<br>
+                • Reputation damage<br>
+                • SEO manipulation
+            </span>
+        </div>
+
+        <div class="info">
+            <span class="label">Remediation:</span>
+            <span class="value">
+                1. Remove the DNS CNAME record for {subdomain}<br>
+                2. Or claim/reconfigure the {service} resource<br>
+                3. Implement DNS monitoring for dangling records
+            </span>
+        </div>
+
+        <div class="footer">
+            Generated by Subdomain Takeover Scanner<br>
+            This is a responsible disclosure - Do not share publicly until patched
+        </div>
+    </div>
+
+    <!-- Hidden verification comment for automated scanners -->
+    <!-- PoC-Token: {poc_token} -->
+    <!-- Subdomain: {subdomain} -->
+    <!-- Researcher: {BUG_BOUNTY_DETAILS['researcher_name']} -->
+    <!-- Date: {timestamp} -->
+</body>
+</html>
+"""
+    return html, poc_token
+
+
+def generate_txt_poc(subdomain, service, cname, evidence):
+    """Generate simple TXT PoC file"""
+    poc_token = generate_poc_token()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+    txt = f"""
+================================================================================
+SUBDOMAIN TAKEOVER - PROOF OF CONCEPT
+================================================================================
+
+Subdomain:      {subdomain}
+Service:        {service}
+CNAME:          {cname}
+Discovered:     {timestamp}
+Researcher:     {BUG_BOUNTY_DETAILS['researcher_name']} ({BUG_BOUNTY_DETAILS['researcher_email']})
+Platform:       {BUG_BOUNTY_DETAILS['platform']}
+PoC Token:      {poc_token}
+
+VULNERABILITY:
+This subdomain is vulnerable to takeover. An attacker could claim this
+resource and serve malicious content under your trusted domain.
+
+EVIDENCE:
+{evidence}
+
+IMPACT:
+- Phishing attacks using trusted domain
+- Malware distribution
+- Cookie theft (session hijacking)
+- Reputation damage
+- SEO manipulation
+
+REMEDIATION:
+1. Remove the DNS CNAME record for {subdomain}
+2. Or claim/reconfigure the {service} resource
+3. Implement DNS monitoring for dangling records
+
+================================================================================
+This is a responsible disclosure - Do not share publicly until patched
+================================================================================
+"""
+    return txt, poc_token
+
+
+def generate_claiming_instructions(subdomain, service, cname):
+    """Generate step-by-step instructions for claiming the subdomain"""
+
+    instructions = {
+        'AWS S3': f"""
+HOW TO CLAIM THIS SUBDOMAIN (AWS S3):
+================================================================================
+
+1. Extract bucket name from CNAME:
+   CNAME: {cname}
+   Bucket name: {cname.split('.')[0]}
+
+2. Create S3 bucket with AWS CLI:
+   aws s3 mb s3://{cname.split('.')[0]}
+
+3. Enable static website hosting:
+   aws s3 website s3://{cname.split('.')[0]} --index-document poc.html
+
+4. Upload PoC file:
+   aws s3 cp poc.html s3://{cname.split('.')[0]}/poc.html --acl public-read
+
+5. Make bucket public:
+   aws s3api put-bucket-acl --bucket {cname.split('.')[0]} --acl public-read
+
+6. Verify at: http://{subdomain}/poc.html
+""",
+
+        'Azure': f"""
+HOW TO CLAIM THIS SUBDOMAIN (Azure):
+================================================================================
+
+1. Extract app name from CNAME:
+   CNAME: {cname}
+   App name: {cname.split('.')[0]}
+
+2. Create Azure App Service:
+   az webapp create --resource-group MyResourceGroup --plan MyPlan --name {cname.split('.')[0]}
+
+3. Deploy PoC file:
+   az webapp deployment source config-zip --resource-group MyResourceGroup --name {cname.split('.')[0]} --src poc.zip
+
+4. Configure custom domain:
+   az webapp config hostname add --webapp-name {cname.split('.')[0]} --resource-group MyResourceGroup --hostname {subdomain}
+
+5. Verify at: https://{subdomain}
+""",
+
+        'GitHub Pages': f"""
+HOW TO CLAIM THIS SUBDOMAIN (GitHub Pages):
+================================================================================
+
+1. Extract GitHub repo from CNAME:
+   CNAME: {cname}
+   User/Org: {cname.split('.')[0]}
+
+2. Create GitHub repository:
+   - Go to github.com
+   - Create repo named: {cname.split('.')[0]}.github.io
+
+3. Add CNAME file:
+   echo "{subdomain}" > CNAME
+
+4. Upload PoC:
+   - Add index.html (your PoC file)
+   - Add CNAME file
+   - Push to main branch
+
+5. Enable GitHub Pages:
+   - Repo Settings → Pages
+   - Source: main branch
+
+6. Verify at: https://{subdomain}
+""",
+
+        'Heroku': f"""
+HOW TO CLAIM THIS SUBDOMAIN (Heroku):
+================================================================================
+
+1. Extract app name from CNAME:
+   CNAME: {cname}
+   App name: {cname.split('.')[0]}
+
+2. Create Heroku app:
+   heroku create {cname.split('.')[0]}
+
+3. Deploy PoC:
+   git init
+   git add .
+   git commit -m "PoC"
+   git push heroku main
+
+4. Add custom domain:
+   heroku domains:add {subdomain}
+
+5. Verify at: https://{subdomain}
+""",
+    }
+
+    # Try to match service to instructions
+    for key in instructions:
+        if key.lower() in service.lower():
+            return instructions[key]
+
+    return f"""
+HOW TO CLAIM THIS SUBDOMAIN ({service}):
+================================================================================
+
+Service: {service}
+CNAME: {cname}
+
+This service may require manual claiming. Steps vary by provider.
+Check the service documentation for subdomain claiming procedures.
+
+Common steps:
+1. Create an account with {service}
+2. Create a resource matching the CNAME: {cname}
+3. Upload your PoC file
+4. Configure custom domain: {subdomain}
+5. Verify the takeover
+"""
+
+
+def generate_all_pocs(verified_csv):
+    """Generate PoC files for all verified vulnerabilities"""
+
+    if not Path(verified_csv).exists():
+        print(f"❌ Error: {verified_csv} not found!")
+        print("Run verification first to generate verified vulnerabilities.")
+        return
+
+    print(f"🔨 Generating PoC files from {verified_csv}...")
+    print(f"📁 Output folder: {POC_FOLDER}\n")
+
+    # Read verified vulnerabilities
+    with open(verified_csv, 'r') as f:
+        reader = csv.DictReader(f)
+        vulnerabilities = [row for row in reader if row.get('vulnerable', '').lower() == 'true']
+
+    if not vulnerabilities:
+        print("❌ No verified vulnerabilities found in CSV!")
+        return
+
+    print(f"✅ Found {len(vulnerabilities)} verified vulnerabilities\n")
+
+    generated_count = 0
+
+    for vuln in vulnerabilities:
+        subdomain = vuln['subdomain']
+        service = vuln['service']
+        cname = vuln['cname']
+        evidence = vuln.get('evidence', 'Subdomain takeover detected')
+
+        # Create subfolder for this subdomain
+        subdomain_folder = POC_FOLDER / subdomain.replace('.', '_')
+        subdomain_folder.mkdir(exist_ok=True)
+
+        print(f"📝 Generating PoCs for: {subdomain}")
+
+        # Generate HTML PoC
+        html_content, poc_token = generate_html_poc(subdomain, service, cname, evidence)
+        html_file = subdomain_folder / "poc.html"
+        with open(html_file, 'w') as f:
+            f.write(html_content)
+        print(f"   ✅ HTML PoC: {html_file}")
+
+        # Generate TXT PoC
+        txt_content, _ = generate_txt_poc(subdomain, service, cname, evidence)
+        txt_file = subdomain_folder / "poc.txt"
+        with open(txt_file, 'w') as f:
+            f.write(txt_content)
+        print(f"   ✅ TXT PoC: {txt_file}")
+
+        # Generate claiming instructions
+        instructions = generate_claiming_instructions(subdomain, service, cname)
+        instructions_file = subdomain_folder / "CLAIMING_INSTRUCTIONS.txt"
+        with open(instructions_file, 'w') as f:
+            f.write(instructions)
+        print(f"   ✅ Instructions: {instructions_file}")
+
+        # Generate summary file
+        summary = f"""
+SUBDOMAIN TAKEOVER PoC - {subdomain}
+{"="*80}
+
+PoC Token: {poc_token}
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+FILES IN THIS FOLDER:
+- poc.html                    → Upload this to claim the subdomain
+- poc.txt                     → Text version for bug bounty report
+- CLAIMING_INSTRUCTIONS.txt   → Step-by-step claiming guide
+
+QUICK START:
+1. Read CLAIMING_INSTRUCTIONS.txt
+2. Claim the subdomain using the instructions
+3. Upload poc.html to the claimed resource
+4. Verify at: http://{subdomain}/poc.html (or https://)
+5. Submit bug bounty report with PoC token: {poc_token}
+
+SUBDOMAIN DETAILS:
+- Subdomain: {subdomain}
+- Service: {service}
+- CNAME: {cname}
+- Evidence: {evidence}
+
+BUG BOUNTY SUBMISSION:
+- Include PoC token: {poc_token}
+- Link to PoC: http://{subdomain}/poc.html
+- Attach poc.txt to your report
+"""
+        summary_file = subdomain_folder / "README.txt"
+        with open(summary_file, 'w') as f:
+            f.write(summary)
+        print(f"   ✅ Summary: {summary_file}")
+
+        print(f"   🎯 PoC Token: {poc_token}\n")
+
+        generated_count += 1
+
+    # Generate master summary
+    master_summary = f"""
+SUBDOMAIN TAKEOVER PoCs - MASTER SUMMARY
+{"="*80}
+
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Total Vulnerabilities: {generated_count}
+Researcher: {BUG_BOUNTY_DETAILS['researcher_name']}
+
+VULNERABILITIES:
+{"="*80}
+
+"""
+
+    for idx, vuln in enumerate(vulnerabilities, 1):
+        subdomain = vuln['subdomain']
+        service = vuln['service']
+        subdomain_folder_name = subdomain.replace('.', '_')
+
+        master_summary += f"""
+{idx}. {subdomain}
+   Service: {service}
+   PoC Folder: {subdomain_folder_name}/
+   Files: poc.html, poc.txt, CLAIMING_INSTRUCTIONS.txt
+
+"""
+
+    master_file = POC_FOLDER / "MASTER_SUMMARY.txt"
+    with open(master_file, 'w') as f:
+        f.write(master_summary)
+
+    print("="*80)
+    print(f"✅ PoC Generation Complete!")
+    print(f"📊 Generated PoCs for {generated_count} vulnerabilities")
+    print(f"📁 Location: {POC_FOLDER}")
+    print(f"📄 Master summary: {master_file}")
+    print("\nNEXT STEPS:")
+    print("1. Open each subdomain folder")
+    print("2. Read CLAIMING_INSTRUCTIONS.txt")
+    print("3. Claim the subdomain")
+    print("4. Upload poc.html")
+    print("5. Submit bug bounty report with PoC token")
+    print("="*80)
+
+
+if __name__ == "__main__":
+    # Default verified CSV location
+    verified_csv = VERIFIED_FOLDER / "verified_vulnerabilities.csv"
+
+    print(f"""
+╔══════════════════════════════════════════════════════════════╗
+║          SUBDOMAIN TAKEOVER PoC GENERATOR                    ║
+╚══════════════════════════════════════════════════════════════╝
+
+⚠️  NOTE: Using default researcher details.
+   Edit poc_generator.py to customize:
+   - researcher_name: '{BUG_BOUNTY_DETAILS['researcher_name']}'
+   - researcher_email: '{BUG_BOUNTY_DETAILS['researcher_email']}'
+   - platform: '{BUG_BOUNTY_DETAILS['platform']}'
+""")
+
+    generate_all_pocs(verified_csv)
