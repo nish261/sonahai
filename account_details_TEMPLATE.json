@@ -59,6 +59,12 @@
     "_note": "Get from: https://dash.cloudflare.com/profile/api-tokens"
   },
 
+  "wordpress": {
+    "email": "your-wordpress-email@example.com",
+    "password": "YOUR_WORDPRESS_PASSWORD",
+    "_note": "WordPress.com account for auto-claiming vulnerable WordPress sites"
+  },
+
   "moz_api": {
     "access_id": "",
     "secret_key": "",

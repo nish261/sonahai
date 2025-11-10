@@ -28,8 +28,8 @@ That's it! The scanner will now run every 6 hours automatically.
 ## 📊 What You Get
 
 ### Automated Output (Every 6 Hours):
-- ✅ **Vulnerability Scans**: 100+ domains per cycle
-- ✅ **Auto-Claiming**: High-value S3/Azure/AWS targets claimed automatically
+- ✅ **Vulnerability Scans**: 1000 domains per cycle (starting from rank 500)
+- ✅ **Auto-Claiming**: High-value S3/Azure/AWS/WordPress targets claimed automatically
 - ✅ **PoC Generation**: Professional reports with screenshots
 - ✅ **Niche Analysis**: SEO metrics, CPA estimates, monetization potential
 - ✅ **Notifications**: Email/Slack alerts on successful claims
@@ -108,6 +108,10 @@ Opens web interface at `http://localhost:8501`
       "client_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     }
   ],
+  "wordpress": {
+    "email": "your-wordpress-email@example.com",
+    "password": "your-wordpress-password"
+  },
   "notifications": {
     "email": "your-email@example.com",
     "slack_webhook": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
@@ -137,7 +141,7 @@ Edit these for your needs:
 - `automated_nightly_scanner.py` - Scheduled scanning
 
 ### Auto-Claimers:
-- `auto_poc_claimer.py` - Universal auto-claimer
+- `auto_poc_claimer.py` - Universal auto-claimer (S3, Azure, GitHub, WordPress)
 - `aws_eb_auto_claimer.py` - AWS Elastic Beanstalk
 - `azure_auto_claimer.py` - Azure services (Storage, Apps, etc.)
 
@@ -209,7 +213,8 @@ open ~/Desktop/Subdomain_Takeover_Results/Niche_Analysis/niche_analysis.csv
 
 ### Run Manual Scan:
 ```bash
-python3 aggressive_scanner.py 1 100 "com,net,org" 20
+# Scan 1000 domains starting from rank 500
+python3 aggressive_scanner.py 500 1000 "com,net,org" 20 10
 ```
 
 ### Generate PoC for Specific Domain:
