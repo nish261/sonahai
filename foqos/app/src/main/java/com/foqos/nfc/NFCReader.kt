@@ -82,17 +82,34 @@ class NFCReader @Inject constructor() {
     }
     
     /**
-     * Get tag information for debugging/display.
+     * Check if discovered tag matches any configured tags and return the mode.
      */
-    fun getTagInfo(tag: Tag): TagInfo {
-        return TagInfo(
-            id = getTagId(tag),
-            technologies = getTagTechnologies(tag)
+    fun checkTagMode(
+        tag: Tag,
+        configuredTags: List<com.foqos.domain.model.NFCTagConfig>
+    ): com.foqos.domain.model.NFCTagMode? {
+        val tagId = getTagId(tag)
+        val matchingTag = configuredTags.firstOrNull { it.tagId == tagId }
+        return matchingTag?.mode
+    }
+    
+    /**
+     * Get tag info including technology support.
+     */
+    fun getTagInfo(tag: Tag): NFCTagInfo {
+        val tagId = getTagId(tag)
+        val technologies = tag.techList.map { it.substringAfterLast('.') }
+        
+        return NFCTagInfo(
+            id = tagId,
+            technologies = technologies,
+            isNdefSupported = tag.techList.contains("android.nfc.tech.Ndef")
         )
     }
     
-    data class TagInfo(
+    data class NFCTagInfo(
         val id: String,
-        val technologies: List<String>
+        val technologies: List<String>,
+        val isNdefSupported: Boolean
     )
 }

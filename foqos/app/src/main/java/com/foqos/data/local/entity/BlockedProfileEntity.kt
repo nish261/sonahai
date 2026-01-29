@@ -33,9 +33,20 @@ data class BlockedProfileEntity(
     // Website blocking
     val domains: List<String>? = null,
     
-    // Physical unlock
-    val physicalUnblockNFCTagId: String? = null,
-    val physicalUnblockQRCodeId: String? = null,
+    // Physical unlock - Multiple NFC tags with different purposes
+    val nfcTags: List<NFCTagConfig>? = null,
+    
+    // QR code unlock
+    val qrCodeId: String? = null,
+    
+    // Emergency unlock settings
+    val emergencyUnlockEnabled: Boolean = true,
+    val emergencyUnlockAttempts: Int = 5,
+    val emergencyUnlockCooldownMinutes: Int = 60, // Cooldown after all attempts used
+    
+    // Remote lock feature
+    val remoteLockEnabled: Boolean = false, // Can be enabled remotely
+    val remoteLockActive: Boolean = false, // Currently in remote lock mode
     
     // Schedule
     val scheduleEnabled: Boolean = false,

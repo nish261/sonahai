@@ -80,14 +80,65 @@ fun HomeScreen(
                 .padding(padding)
         ) {
             // Active session banner
-            activeSession?.let { session ->
-                val profile = profiles.find { it.id == session.profileId }
-                if (profile != null) {
+            activeSession?.let { activeSession ->
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Remote lock banner if active
+                    if (activeSession.remoteLockActivatedTime != null) {
+                        RemoteLockBanner(
+                            activatedTime = activeSession.remoteLockActivatedTime,
+                            activatedBy = activeSession.remoteLockActivatedBy,
+                            onShowNFCScanner = {
+                                // Show NFC scanner
+                            }
+                        )
+                    }
+                    
+                    // Normal session banner
                     ActiveSessionBanner(
-                        profile = profile,
-                        session = session,
-                        onStop = { viewModel.stopSession() }
+                        session = activeSession,
+                        onStop = { viewModel.stopSession() },
+                        onBreak = { showBreakDialog = true },
+                        modifier = Modifier.fillMaxWidth()
                     )
+                    
+                    // Emergency unlock and remote lock controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Emergency unlock button
+                        OutlinedButton(
+                            onClick = { showEmergencyDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = "Emergency",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Emergency")
+                        }
+                        
+                        // Remote lock toggle button
+                        if (activeSession.remoteLockActivatedTime == null) {
+                            FilledTonalButton(
+                                onClick = { showRemoteLockDialog = true },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Lock,
+                                    contentDescription = "Remote Lock",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Remote Lock")
+                            }
+                        }
+                    }
                 }
             }
             
@@ -141,6 +192,46 @@ fun HomeScreen(
                 showCreateDialog = false
             }
         )
+    }
+
+    // Dialogs for active session
+    activeSession?.let { session ->
+        val selectedProfile = profiles.find { it.id == session.profileId }
+        
+        if (showBreakDialog && selectedProfile != null) {
+            BreakDialog(
+                profile = selectedProfile,
+                onDismiss = { showBreakDialog = false },
+                onStartBreak = { duration ->
+                    viewModel.startBreak(duration)
+                    showBreakDialog = false
+                }
+            )
+        }
+        
+        if (showEmergencyDialog && selectedProfile != null) {
+            val attemptsRemaining = selectedProfile.emergencyUnlockAttempts - session.emergencyUnlockAttemptsUsed
+            EmergencyUnlockDialog(
+                attemptsRemaining = attemptsRemaining,
+                maxAttempts = selectedProfile.emergencyUnlockAttempts,
+                cooldownEndTime = session.emergencyUnlockCooldownUntil,
+                onUnlock = {
+                    viewModel.useEmergencyUnlock()
+                    showEmergencyDialog = false
+                },
+                onDismiss = { showEmergencyDialog = false }
+            )
+        }
+        
+        if (showRemoteLockDialog) {
+            RemoteLockActivationDialog(
+                onActivate = { deviceName ->
+                    viewModel.activateRemoteLock(deviceName)
+                    showRemoteLockDialog = false
+                },
+                onDismiss = { showRemoteLockDialog = false }
+            )
+        }
     }
 }
 
