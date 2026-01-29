@@ -92,7 +92,18 @@ Choose how strict your focus sessions should be:
 ### Latest Release
 Download the latest APK from the [Releases page](https://github.com/nish261/sonahai/releases).
 
-### Requirements
+**Direct APK download - no extraction needed!**
+
+### Automatic Builds (Advanced)
+Every commit triggers an automatic build. To download:
+
+1. Go to [Actions](https://github.com/nish261/sonahai/actions)
+2. Click latest successful workflow
+3. Download artifact (it's a ZIP file)
+4. **Extract the ZIP** to get the APK
+5. Install the APK
+
+> **Important:** GitHub Actions wraps all artifacts in ZIP files. You must extract it first!
 - Android 8.0 (Oreo) or higher
 - ~15 MB storage space
 - NFC hardware (optional, for NFC unlock)
